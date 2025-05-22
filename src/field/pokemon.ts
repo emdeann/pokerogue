@@ -6310,6 +6310,9 @@ export default abstract class Pokemon extends Phaser.GameObjects.Container {
       .filter(p => p !== this)
       .forEach(p => p.removeTagsBySourceId(this.id));
 
+    // Trigger abilities that activate upon leaving the field
+    applyPreLeaveFieldAbAttrs(PreLeaveFieldAbAttr, this);
+
     if (clearEffects) {
       this.destroySubstitute();
       this.resetSummonData();
@@ -6317,8 +6320,7 @@ export default abstract class Pokemon extends Phaser.GameObjects.Container {
     if (hideInfo) {
       this.hideInfo();
     }
-    // Trigger abilities that activate upon leaving the field
-    applyPreLeaveFieldAbAttrs(PreLeaveFieldAbAttr, this);
+
     this.setSwitchOutStatus(true);
     globalScene.triggerPokemonFormChange(
       this,
