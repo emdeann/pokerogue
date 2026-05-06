@@ -57,7 +57,7 @@ import { MessageUiHandler } from "#ui/message-ui-handler";
 import { MoveInfoOverlay } from "#ui/move-info-overlay";
 import { PokemonIconAnimHelper, PokemonIconAnimMode } from "#ui/pokemon-icon-anim-helper";
 import { ScrollBar } from "#ui/scroll-bar";
-import { StarterContainer } from "#ui/starter-container";
+import { STARTER_CONTAINER_HEIGHT, STARTER_CONTAINER_WIDTH, StarterContainer } from "#ui/starter-container";
 import { StatsContainer } from "#ui/stats-container";
 import { addBBCodeTextObject, addTextObject, getTextColor, updateCandyCountTextStyle } from "#ui/text";
 import { addWindow } from "#ui/ui-theme";
@@ -79,8 +79,10 @@ import { toCamelCase, toTitleCase } from "#utils/strings";
 import i18next from "i18next";
 import type { GameObjects } from "phaser";
 import type BBCodeText from "phaser3-rex-plugins/plugins/bbcodetext";
+import FixWidthButtons from "phaser3-rex-plugins/templates/ui/fixwidthbuttons/FixWidthButtons";
 
 export type StarterSelectCallback = (starters: Starter[]) => void;
+const SPECIES_VERTICAL_OFFSET = 13;
 
 interface LanguageSetting {
   starterInfoTextSize: string;
@@ -226,10 +228,9 @@ const randomSelectionWindowHeight = 20;
  * @returns An interface with an x and y property
  */
 function calcStarterPosition(index: number, scrollCursor = 0): { x: number; y: number } {
-  const yOffset = 13;
   const height = 17;
   const x = (index % 9) * 18;
-  const y = yOffset + (Math.floor(index / 9) - scrollCursor) * height;
+  const y = SPECIES_VERTICAL_OFFSET + (Math.floor(index / 9) - scrollCursor) * height;
 
   return { x, y };
 }
@@ -255,7 +256,7 @@ function findClosestStarterIndex(y: number, teamSize = 6): number {
   let smallestDistance = teamWindowHeight;
   let closestStarterIndex = 0;
   for (let i = 0; i < teamSize; i++) {
-    const distance = Math.abs(y - (calcStarterIconY(i) - 13));
+    const distance = Math.abs(y - (calcStarterIconY(i) - SPECIES_VERTICAL_OFFSET));
     if (distance < smallestDistance) {
       closestStarterIndex = i;
       smallestDistance = distance;
@@ -271,7 +272,7 @@ function findClosestStarterIndex(y: number, teamSize = 6): number {
  * @returns index of the row closest vertically to the given Pokemon
  */
 function findClosestStarterRow(index: number, numberOfRows: number) {
-  const currentY = calcStarterIconY(index) - 13;
+  const currentY = calcStarterIconY(index) - SPECIES_VERTICAL_OFFSET;
   let smallestDistance = teamWindowHeight;
   let closestRowIndex = 0;
   for (let i = 0; i < numberOfRows; i++) {
@@ -301,6 +302,7 @@ export class StarterSelectUiHandler extends MessageUiHandler {
   private filterBarContainer: Phaser.GameObjects.Container;
   private filterBar: FilterBar;
   private shinyOverlay: Phaser.GameObjects.Image;
+  private starterButtons: FixWidthButtons;
   private starterContainers: StarterContainer[] = [];
   private filteredStarterContainers: StarterContainer[] = [];
   private validStarterContainers: StarterContainer[] = [];
@@ -798,8 +800,6 @@ export class StarterSelectUiHandler extends MessageUiHandler {
       .setVisible(false)
       .setOrigin(0);
 
-    starterBoxContainer.add(this.cursorObj);
-
     // TODO: Apply the same logic done in the pokedex to only have 81 containers whose sprites are cycled
     for (const species of allSpecies) {
       if (!Object.hasOwn(speciesStarterCosts, species.speciesId)) {
@@ -815,6 +815,35 @@ export class StarterSelectUiHandler extends MessageUiHandler {
       this.starterContainers.push(starterContainer);
       starterBoxContainer.add(starterContainer);
     }
+
+    this.starterButtons = new FixWidthButtons(globalScene, {
+      origin: 0,
+      width: STARTER_CONTAINER_WIDTH * 9,
+      height: STARTER_CONTAINER_HEIGHT * 9,
+      click: {
+        mode: "press",
+        clickInterval: 100,
+      },
+      space: {
+        top: SPECIES_VERTICAL_OFFSET,
+      },
+    });
+
+    this.starterButtons.on("button.over", (container: StarterContainer) => {
+      if (this.blockInput || this.filterMode) {
+        return;
+      }
+
+      this.setCursor(this.starterButtons.buttons.indexOf(container));
+    });
+
+    this.starterButtons.on("button.click", () => {
+      if (!this.blockInput) {
+        this.processInput(Button.ACTION);
+      }
+    });
+    globalScene.add.existing(this.starterButtons);
+    starterBoxContainer.add(this.starterButtons);
 
     this.starterIcons = [];
     for (let i = 0; i < 6; i++) {
@@ -1247,7 +1276,6 @@ export class StarterSelectUiHandler extends MessageUiHandler {
 
       this.setFilterMode(false);
       this.filterBarCursor = 0;
-      this.setCursor(0);
       this.tryUpdateValue(0);
 
       handleTutorial(Tutorial.STARTER_SELECT);
@@ -1960,9 +1988,9 @@ export class StarterSelectUiHandler extends MessageUiHandler {
                     true,
                   );
                   if (!isDupe && isValidForChallenge && isOverValueLimit) {
-                    this.starterCursorObjs[this.starterSpecies.length]
-                      .setVisible(true)
-                      .setPosition(this.cursorObj.x, this.cursorObj.y);
+                    this.filteredStarterContainers[this.cursor].activateCursor(
+                      this.starterCursorObjs[this.starterSpecies.length].setVisible(true),
+                    );
                     this.addToParty(
                       this.lastSpecies,
                       this.dexAttrCursor,
@@ -3078,6 +3106,42 @@ export class StarterSelectUiHandler extends MessageUiHandler {
     return valueLimit.value;
   }
 
+  private getValidStartersForChallenge(starterContainers: readonly StarterContainer[]): StarterContainer[] {
+    return starterContainers.filter(container => {
+      const species = container.species;
+      let allFormsValid = false;
+      if (species.forms?.length > 0) {
+        for (let i = 0; i < species.forms.length; i++) {
+          /* Here we are making a fake form index dex props for challenges
+           * Since some pokemon rely on forms to be valid (i.e. blaze tauros for fire challenges), we make a fake form and dex props to use in the challenge
+           */
+          if (!species.forms[i].isStarterSelectable) {
+            continue;
+          }
+          const tempFormProps = BigInt(Math.pow(2, i)) * DexAttr.DEFAULT_FORM;
+          const isValidForChallenge = checkStarterValidForChallenge(
+            container.species,
+            globalScene.gameData.getSpeciesDexAttrProps(species, tempFormProps),
+            true,
+          );
+          allFormsValid ||= isValidForChallenge;
+        }
+      } else {
+        const isValidForChallenge = checkStarterValidForChallenge(
+          container.species,
+          globalScene.gameData.getSpeciesDexAttrProps(
+            species,
+            globalScene.gameData.getSpeciesDefaultDexAttr(container.species, false, true),
+          ),
+          true,
+        );
+        allFormsValid = isValidForChallenge;
+      }
+      container.setVisible(allFormsValid);
+      return allFormsValid;
+    });
+  }
+
   updateStarters = () => {
     this.scrollCursor = 0;
     this.filteredStarterContainers = [];
@@ -3090,42 +3154,7 @@ export class StarterSelectUiHandler extends MessageUiHandler {
 
     // pre filter for challenges
     if (globalScene.gameMode.modeId === GameModes.CHALLENGE) {
-      this.starterContainers.forEach(container => {
-        const species = container.species;
-        let allFormsValid = false;
-        if (species.forms?.length > 0) {
-          for (let i = 0; i < species.forms.length; i++) {
-            /* Here we are making a fake form index dex props for challenges
-             * Since some pokemon rely on forms to be valid (i.e. blaze tauros for fire challenges), we make a fake form and dex props to use in the challenge
-             */
-            if (!species.forms[i].isStarterSelectable) {
-              continue;
-            }
-            const tempFormProps = BigInt(Math.pow(2, i)) * DexAttr.DEFAULT_FORM;
-            const isValidForChallenge = checkStarterValidForChallenge(
-              container.species,
-              globalScene.gameData.getSpeciesDexAttrProps(species, tempFormProps),
-              true,
-            );
-            allFormsValid ||= isValidForChallenge;
-          }
-        } else {
-          const isValidForChallenge = checkStarterValidForChallenge(
-            container.species,
-            globalScene.gameData.getSpeciesDexAttrProps(
-              species,
-              globalScene.gameData.getSpeciesDefaultDexAttr(container.species, false, true),
-            ),
-            true,
-          );
-          allFormsValid = isValidForChallenge;
-        }
-        if (allFormsValid) {
-          this.validStarterContainers.push(container);
-        } else {
-          container.setVisible(false);
-        }
-      });
+      this.validStarterContainers = this.getValidStartersForChallenge(this.starterContainers);
     } else {
       this.validStarterContainers = this.starterContainers;
     }
@@ -3379,7 +3408,7 @@ export class StarterSelectUiHandler extends MessageUiHandler {
     */
   }
 
-  updateScroll = () => {
+  private updateScroll(): void {
     const maxColumns = 9;
     const maxRows = 9;
     const onScreenFirstIndex = this.scrollCursor * maxColumns;
@@ -3391,11 +3420,11 @@ export class StarterSelectUiHandler extends MessageUiHandler {
     this.starterSelectScrollBar.setScrollCursor(this.scrollCursor);
 
     let pokerusCursorIndex = 0;
+    this.starterButtons.clear();
     this.filteredStarterContainers.forEach((container, i) => {
       const { dexEntry, starterDataEntry } = this.getSpeciesData(container.species.speciesId);
 
       const pos = calcStarterPosition(i, this.scrollCursor);
-      container.setPosition(pos.x, pos.y);
       if (i < onScreenFirstIndex || i > onScreenLastIndex) {
         container.setVisible(false);
 
@@ -3411,6 +3440,7 @@ export class StarterSelectUiHandler extends MessageUiHandler {
         }
         return;
       }
+      this.starterButtons.addButton(container);
       container.setVisible(true);
 
       if (this.pokerusSpecies.includes(container.species)) {
@@ -3468,7 +3498,12 @@ export class StarterSelectUiHandler extends MessageUiHandler {
         container.candyUpgradeOverlayIcon.setVisible(false);
       }
     });
-  };
+
+    if (this.cursor < 0) {
+      this.setCursor(0);
+    }
+    this.starterButtons.layout();
+  }
 
   setCursor(cursor: number): boolean {
     let changed = false;
@@ -3479,13 +3514,16 @@ export class StarterSelectUiHandler extends MessageUiHandler {
 
       this.filterBar.setCursor(cursor);
     } else {
+      const oldCursor = cursor;
       cursor = Math.max(Math.min(this.filteredStarterContainers.length - 1, cursor), 0);
       changed = super.setCursor(cursor);
+      const container = this.filteredStarterContainers[cursor];
+      const species = container?.species;
 
-      const pos = calcStarterPosition(cursor, this.scrollCursor);
-      this.cursorObj.setPosition(pos.x - 1, pos.y + 1);
-
-      const species = this.filteredStarterContainers[cursor]?.species;
+      if (changed) {
+        this.filteredStarterContainers[oldCursor]?.removeCursor(this.cursorObj);
+        container.activateCursor(this.cursorObj);
+      }
 
       if (species) {
         const defaultDexAttr = this.getCurrentDexProps(species.speciesId);
