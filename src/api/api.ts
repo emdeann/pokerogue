@@ -3,6 +3,7 @@ import { PokerogueAdminApi } from "#api/admin-api";
 import { ApiBase } from "#api/api-base";
 import { PokerogueDailyApi } from "#api/daily-api";
 import { PokerogueSavedataApi } from "#api/savedata-api";
+import { isDev } from "#constants/app-constants";
 import type { TitleStatsResponse } from "#types/api";
 
 /** A wrapper for PokéRogue API requests. */
@@ -27,7 +28,9 @@ export class PokerogueApi extends ApiBase {
       const response = await this.doGet("/game/titlestats");
       return (await response.json()) as TitleStatsResponse;
     } catch (err) {
-      console.warn("Could not get game title stats!", err);
+      if (!isDev) {
+        console.warn("Could not get game title stats!", err);
+      }
       return null;
     }
   }

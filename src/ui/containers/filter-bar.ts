@@ -132,7 +132,6 @@ export class FilterBar extends Phaser.GameObjects.Container {
   offsetHybridFilters(): void {
     for (const dropDown of this.dropDowns) {
       if (dropDown.dropDownType === DropDownType.HYBRID) {
-        dropDown.autoSize();
         dropDown.x = -dropDown.getWidth();
         dropDown.y = 0;
       }
