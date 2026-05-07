@@ -5,9 +5,15 @@ import { TextStyle } from "#enums/text-style";
 import type { DexAttrProps } from "#types/save-data";
 import { addTextObject } from "#ui/text";
 import { getPokemonSpecies } from "#utils/pokemon-utils";
+import Label from "phaser3-rex-plugins/templates/ui/label/Label";
 
-export class StarterContainer extends Phaser.GameObjects.Container {
+export const STARTER_CONTAINER_WIDTH = 18;
+export const STARTER_CONTAINER_HEIGHT = 17;
+
+export class StarterContainer extends Label {
   public species: PokemonSpecies;
+  public content: Phaser.GameObjects.Container;
+
   public icon: Phaser.GameObjects.Sprite;
   public shinyIcons: Phaser.GameObjects.Image[] = [];
   public label: Phaser.GameObjects.Text;
@@ -17,82 +23,82 @@ export class StarterContainer extends Phaser.GameObjects.Container {
   public classicWinIcon: Phaser.GameObjects.Image;
   public candyUpgradeIcon: Phaser.GameObjects.Image;
   public candyUpgradeOverlayIcon: Phaser.GameObjects.Image;
+
   public cost = 0;
 
   constructor(speciesId: SpeciesId) {
-    super(globalScene, 0, 0);
+    const content = globalScene.add.container(0, 0);
+
+    super(globalScene, {
+      width: STARTER_CONTAINER_WIDTH,
+      height: STARTER_CONTAINER_HEIGHT,
+      icon: content,
+      align: "center",
+    });
+
+    globalScene.add.existing(this);
+    this.content = content;
 
     const defaultProps = globalScene.gameData.getSpeciesDefaultDexAttrProps(speciesId);
+    this.content = content;
 
     this.setSpecies(speciesId, defaultProps);
 
-    // starter passive bg
-    const starterPassiveBg = globalScene.add.image(2, 5, "passive_bg");
-    starterPassiveBg.setOrigin(0, 0);
-    starterPassiveBg.setScale(0.75);
-    starterPassiveBg.setVisible(false);
-    this.add(starterPassiveBg);
+    const starterPassiveBg = globalScene.add.image(2, 5, "passive_bg").setOrigin(0).setScale(0.75).setVisible(false);
+
+    content.add(starterPassiveBg);
     this.starterPassiveBgs = starterPassiveBg;
 
-    // shiny icons
     for (let i = 0; i < 3; i++) {
-      const shinyIcon = globalScene.add.image(i * -3 + 12, 2, "shiny_star_small");
-      shinyIcon.setScale(0.5);
-      shinyIcon.setOrigin(0, 0);
-      shinyIcon.setVisible(false);
+      const shinyIcon = globalScene.add
+        .image(i * -3 + 12, 2, "shiny_star_small")
+        .setScale(0.5)
+        .setOrigin(0)
+        .setVisible(false);
+
       this.shinyIcons.push(shinyIcon);
     }
-    this.add(this.shinyIcons);
+    content.add(this.shinyIcons);
 
-    // value label
-    const label = addTextObject(1, 2, "0", TextStyle.WINDOW, {
+    this.label = addTextObject(1, 2, "0", TextStyle.WINDOW, {
       fontSize: "32px",
-    });
-    label.setShadowOffset(2, 2);
-    label.setOrigin(0, 0);
-    label.setVisible(false);
-    this.add(label);
-    this.label = label;
+    })
+      .setOrigin(0)
+      .setVisible(false);
+    this.label.setShadowOffset(2, 2);
+    content.add(this.label);
 
-    // hidden ability icon
-    const abilityIcon = globalScene.add.image(12, 7, "ha_capsule");
-    abilityIcon.setOrigin(0, 0);
-    abilityIcon.setScale(0.5);
-    abilityIcon.setVisible(false);
-    this.add(abilityIcon);
-    this.hiddenAbilityIcon = abilityIcon;
+    this.hiddenAbilityIcon = globalScene.add.image(12, 7, "ha_capsule").setOrigin(0).setScale(0.5).setVisible(false);
+    this.favoriteIcon = globalScene.add.image(0, 7, "favorite").setOrigin(0).setScale(0.5).setVisible(false);
+    this.classicWinIcon = globalScene.add.image(0, 12, "champion_ribbon").setOrigin(0).setScale(0.5).setVisible(false);
+    this.candyUpgradeIcon = globalScene.add.image(12, 12, "candy").setOrigin(0).setScale(0.25).setVisible(false);
 
-    // favorite icon
-    const favoriteIcon = globalScene.add.image(0, 7, "favorite");
-    favoriteIcon.setOrigin(0, 0);
-    favoriteIcon.setScale(0.5);
-    favoriteIcon.setVisible(false);
-    this.add(favoriteIcon);
-    this.favoriteIcon = favoriteIcon;
+    this.candyUpgradeOverlayIcon = globalScene.add
+      .image(12, 12, "candy_overlay")
+      .setOrigin(0)
+      .setScale(0.25)
+      .setVisible(false);
 
-    // classic win icon
-    const classicWinIcon = globalScene.add.image(0, 12, "champion_ribbon");
-    classicWinIcon.setOrigin(0, 0);
-    classicWinIcon.setScale(0.5);
-    classicWinIcon.setVisible(false);
-    this.add(classicWinIcon);
-    this.classicWinIcon = classicWinIcon;
+    content.add([
+      this.hiddenAbilityIcon,
+      this.favoriteIcon,
+      this.classicWinIcon,
+      this.candyUpgradeIcon,
+      this.candyUpgradeOverlayIcon,
+    ]);
+  }
 
-    // candy upgrade icon
-    const candyUpgradeIcon = globalScene.add.image(12, 12, "candy");
-    candyUpgradeIcon.setOrigin(0, 0);
-    candyUpgradeIcon.setScale(0.25);
-    candyUpgradeIcon.setVisible(false);
-    this.add(candyUpgradeIcon);
-    this.candyUpgradeIcon = candyUpgradeIcon;
+  public activateCursor(cursor: Phaser.GameObjects.Image) {
+    this.content.addAt(cursor, 0);
+    cursor.setOrigin(0.5, 0.5);
+    cursor.setPosition(-1, 1);
+  }
 
-    // candy upgrade overlay icon
-    const candyUpgradeOverlayIcon = globalScene.add.image(12, 12, "candy_overlay");
-    candyUpgradeOverlayIcon.setOrigin(0, 0);
-    candyUpgradeOverlayIcon.setScale(0.25);
-    candyUpgradeOverlayIcon.setVisible(false);
-    this.add(candyUpgradeOverlayIcon);
-    this.candyUpgradeOverlayIcon = candyUpgradeOverlayIcon;
+  public removeCursor(cursor: Phaser.GameObjects.Image) {
+    if (!this.content.exists(cursor)) {
+      return;
+    }
+    this.content.remove(cursor);
   }
 
   setSpecies(speciesId: SpeciesId, props: DexAttrProps) {
@@ -101,7 +107,7 @@ export class StarterContainer extends Phaser.GameObjects.Container {
     const { shiny, formIndex, female, variant } = props;
 
     if (this.icon) {
-      this.remove(this.icon);
+      this.content.remove(this.icon);
       this.icon.destroy();
     }
 
@@ -113,7 +119,7 @@ export class StarterContainer extends Phaser.GameObjects.Container {
       .setFrame(this.species.getIconId(female, formIndex, shiny, variant))
       .setTint(0);
     this.checkIconId(female, formIndex, shiny, variant);
-    this.add(this.icon);
+    this.content.add(this.icon);
 
     [
       this.label,
@@ -124,7 +130,7 @@ export class StarterContainer extends Phaser.GameObjects.Container {
       this.candyUpgradeOverlayIcon,
     ].forEach(icon => {
       if (icon) {
-        this.bringToTop(icon);
+        this.content.bringToTop(icon);
       }
     });
   }
