@@ -29,7 +29,7 @@ export class AutoCompleteUiHandler extends AbstractOptionSelectUiHandler {
     if (this.modalContainer) {
       this.optionSelectContainer.setSize(
         this.optionSelectContainer.height,
-        Math.max(this.optionSelectText.displayWidth + 24, this.getWindowWidth()),
+        Math.max(this.optionSelectButtons.displayWidth + 24, this.getWindowWidth()),
       );
       this.optionSelectContainer.setPositionRelative(
         this.modalContainer,
