@@ -95,6 +95,7 @@ export class DropDownOption extends Label {
       text: addTextObject(0, 0, labels[0].text ?? "", TextStyle.TOOLTIP_CONTENT),
       space: {
         icon: 3,
+        iconLeft: type === DropDownType.SINGLE ? 3 : 0,
       },
       ...(sprite != null && { action: sprite }),
       ...(toggle != null && { icon: toggle }),
@@ -267,8 +268,6 @@ export class DropDown extends Phaser.GameObjects.Container {
   private optionHeight = 0;
   private optionPaddingX = 4;
   private optionPaddingY = 6;
-  private optionWidth = 100;
-  private cursorOffset = 0;
 
   constructor(
     x: number,
@@ -283,17 +282,15 @@ export class DropDown extends Phaser.GameObjects.Container {
 
     super(globalScene, x - cursorOffset - windowPadding, y);
 
-    this.optionWidth = 100;
     this.optionHeight = 7;
     this.optionPaddingX = 4;
     this.optionPaddingY = 6;
-    this.cursorOffset = cursorOffset;
 
     this.options = options.map(o => new DropDownOption(o, type));
     this.dropDownType = type;
     this.onChange = onChange;
 
-    this.cursorObj = globalScene.add.image(this.optionPaddingX + 13, 0, "cursor");
+    this.cursorObj = globalScene.add.image(5, 0, "cursor");
     this.cursorObj.setScale(0.5);
     this.cursorObj.setOrigin(0, 0);
     this.cursorObj.setVisible(false);
@@ -392,7 +389,7 @@ export class DropDown extends Phaser.GameObjects.Container {
 
     this.optionButtons.layout();
     this.add(this.optionButtons);
-    this.add(this.cursorObj);
+    this.optionButtons.pin(this.cursorObj);
     this.setVisible(false);
 
     if (this.tooManyOptions) {
@@ -436,11 +433,20 @@ export class DropDown extends Phaser.GameObjects.Container {
     }
     if (cursor >= this.options.length) {
       cursor = this.options.length - 1;
-      this.cursorObj.y = this.optionButtons.y + this.options[cursor].y - 3;
+      // this would be less ugly if there was a setChildLocalY
+      this.optionButtons.setChildLocalPosition(
+        this.cursorObj,
+        this.optionButtons.getChildLocalX(this.cursorObj),
+        this.optionButtons.y + this.options[cursor].y - 3,
+      );
       this.cursorObj.setVisible(true);
       return false;
     }
-    this.cursorObj.y = this.optionButtons.y + this.options[cursor].y - 3;
+    this.optionButtons.setChildLocalPosition(
+      this.cursorObj,
+      this.optionButtons.getChildLocalX(this.cursorObj),
+      this.optionButtons.y + this.options[cursor].y - 3,
+    );
     this.cursorObj.setVisible(true);
 
     if (this.dropDownType === DropDownType.HYBRID) {
