@@ -16,7 +16,7 @@ import type { StarterPreferences } from "#types/save-data";
 import { DropDown, DropDownLabel, DropDownOption, DropDownState, DropDownType, SortCriteria } from "#ui/dropdown";
 import { FilterBar } from "#ui/filter-bar";
 import { MessageUiHandler } from "#ui/message-ui-handler";
-import type { PokemonContainer } from "#ui/pokemon-container";
+import { POKEMON_CONTAINER_WIDTH, type PokemonContainer } from "#ui/pokemon-container";
 import { PokemonIconAnimHelper, PokemonIconAnimMode } from "#ui/pokemon-icon-anim-helper";
 import { ScrollBar } from "#ui/scroll-bar";
 import {
@@ -49,7 +49,7 @@ export const FILTER_BAR_HEIGHT = 17;
 export function calcContainerPosition(index: number): { x: number; y: number } {
   const yOffset = 13;
   const height = 17;
-  const x = (index % COLUMNS) * 18;
+  const x = (index % COLUMNS) * POKEMON_CONTAINER_WIDTH;
   const y = yOffset + Math.floor(index / COLUMNS) * height;
   return { x, y };
 }
@@ -203,17 +203,12 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
     this.gridButtons = new FixWidthButtons(globalScene, {
       x: 0,
       y: 13,
-      width: COLUMNS * 18,
-      space: { item: 0, line: 0 },
+      width: COLUMNS * POKEMON_CONTAINER_WIDTH,
       align: "left",
       buttons: this.pokemonContainers,
-    }).setOrigin(0, 0);
+      origin: 0,
+    });
     this.gridButtons.layout();
-
-    for (let i = 0; i < count; i++) {
-      const pos = calcContainerPosition(i);
-      this.pokemonContainers[i].setPosition(pos.x, pos.y);
-    }
 
     starterBoxContainer.add(this.gridButtons);
 

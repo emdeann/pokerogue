@@ -12,20 +12,7 @@ export class StarterContainer extends PokemonContainer {
     this.setSpecies(speciesId, defaultProps);
   }
 
-  public activateCursor(cursor: Phaser.GameObjects.Image): void {
-    this.content.addAt(cursor, 0);
-    cursor.setOrigin(0.5, 0.5);
-    cursor.setPosition(-1, 1);
-  }
-
-  public removeCursor(cursor: Phaser.GameObjects.Image): void {
-    if (!this.content.exists(cursor)) {
-      return;
-    }
-    this.content.remove(cursor);
-  }
-
-  setSpecies(speciesId: SpeciesId, props: DexAttrProps): void {
+  public setSpecies(speciesId: SpeciesId, props: DexAttrProps): void {
     this.updateIcon(getPokemonSpecies(speciesId), props);
     this.icon.setTint(0);
   }
