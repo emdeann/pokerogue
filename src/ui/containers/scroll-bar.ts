@@ -11,6 +11,9 @@ export class ScrollBar extends Phaser.GameObjects.Container {
   private currentRow: number;
   private totalRows: number;
   private maxRows: number;
+  private top: number;
+  private onScroll: (v: number, dv: number) => void;
+  private grabOffsetY = 0;
 
   /**
    * @param x the scrollbar's x position (origin: top left)
@@ -19,9 +22,17 @@ export class ScrollBar extends Phaser.GameObjects.Container {
    * @param height the scrollbar's height
    * @param maxRows the maximum number of rows that can be shown at once
    */
-  constructor(x: number, y: number, width: number, height: number, maxRows: number) {
+  constructor(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    maxRows: number,
+    onScroll: (v: number, dv: number) => void,
+  ) {
     super(globalScene, x, y);
 
+    this.top = this.getWorldPoint().y;
     this.maxRows = maxRows;
     this.totalRows = maxRows;
     this.currentRow = 0;
@@ -51,6 +62,47 @@ export class ScrollBar extends Phaser.GameObjects.Container {
     this.handleBottom = globalScene.add.nineslice(1, 1, "scroll_bar_handle", undefined, width - 2, 2, 2, 0, 0, 0);
     this.handleBottom.setOrigin(0, 0);
     this.add(this.handleBottom);
+
+    this.onScroll = onScroll;
+
+    this.bg.setInteractive();
+    this.bg.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      const localY = pointer.downY / 6 - this.top;
+      const handleTop = this.handleBody.y;
+      const handleBottom = this.handleBody.y + this.handleBody.displayHeight + this.handleBottom.displayHeight;
+
+      if (localY >= handleTop && localY <= handleBottom) {
+        this.grabOffsetY = localY - handleTop;
+      } else {
+        this.grabOffsetY = (this.handleBody.displayHeight + this.handleBottom.displayHeight) / 2;
+      }
+
+      this.cursorToPointer(pointer);
+    });
+
+    this.bg.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+      if (!pointer.isDown) {
+        return;
+      }
+      this.cursorToPointer(pointer);
+    });
+  }
+
+  private cursorToPointer(pointer: Phaser.Input.Pointer) {
+    const trackHeight = this.bg.displayHeight;
+    const handleHeight = this.handleBody.displayHeight + this.handleBottom.displayHeight;
+
+    const localY = Phaser.Math.Clamp(
+      pointer.y / 6 - this.top - this.grabOffsetY,
+      0,
+      trackHeight - handleHeight, // stop when handle bottom hits the track bottom
+    );
+
+    const row = Math.round((localY / (trackHeight - handleHeight)) * (this.totalRows - this.maxRows));
+    const clamped = Phaser.Math.Clamp(row, 0, this.totalRows - this.maxRows);
+    const change = clamped - this.currentRow;
+    this.setScrollCursor(clamped);
+    this.onScroll(clamped, change);
   }
 
   /**
@@ -82,5 +134,9 @@ export class ScrollBar extends Phaser.GameObjects.Container {
     this.handleBody.y =
       1 + ((this.bg.displayHeight - 1 - this.handleBottom.displayHeight) / this.totalRows) * this.currentRow;
     this.handleBottom.y = this.handleBody.y + this.handleBody.displayHeight;
+  }
+
+  public getCurrentRow(): number {
+    return this.currentRow;
   }
 }

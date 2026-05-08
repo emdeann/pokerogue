@@ -185,7 +185,11 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
     const starterBoxContainer = globalScene.add.container(this.speciesContainerX + 6, 9);
     this.starterBoxContainer = starterBoxContainer;
 
-    this.starterSelectScrollBar = new ScrollBar(161, 12, 5, scrollBarHeight, 9);
+    this.starterSelectScrollBar = new ScrollBar(161, 12, 5, scrollBarHeight, 9, (_v, dv) => {
+      this.scrollCursor += dv;
+      this.updateScroll();
+      this.setCursor(this.cursor);
+    });
     starterBoxContainer.add(this.starterSelectScrollBar);
 
     for (let i = 0; i < POKERUS_STARTER_COUNT; i++) {

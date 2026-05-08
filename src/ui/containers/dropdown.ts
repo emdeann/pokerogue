@@ -264,7 +264,6 @@ export class DropDown extends Phaser.GameObjects.Container {
   private maxOptions = 0;
   private shownOptions = 0;
   private tooManyOptions = false;
-  private firstShown = 0;
   private optionHeight = 0;
   private optionPaddingX = 4;
   private optionPaddingY = 6;
@@ -333,8 +332,6 @@ export class DropDown extends Phaser.GameObjects.Container {
       } else {
         option.setTogglePosition(localBaseX, localBaseY);
       }
-
-      this.firstShown = 0;
     });
 
     const window = addWindow(
@@ -381,7 +378,14 @@ export class DropDown extends Phaser.GameObjects.Container {
       this.optionButtons.space.right += 7;
       this.optionButtons.layout();
       this.x -= 7;
-      this.dropDownScrollBar = new ScrollBar(this.optionButtons.width - 6, 3, 4, this.optionButtons.height - 6, 1);
+      this.dropDownScrollBar = new ScrollBar(
+        this.optionButtons.width - 6,
+        3,
+        4,
+        this.optionButtons.height - 6,
+        this.maxOptions,
+        (_v, dv) => this.setCursor(this.cursor + dv),
+      );
       this.add(this.dropDownScrollBar);
       this.bringToTop(this.dropDownScrollBar);
       this.dropDownScrollBar.setTotalRows(this.totalOptions);
@@ -426,7 +430,7 @@ export class DropDown extends Phaser.GameObjects.Container {
 
   setCursor(cursor: number): boolean {
     if (this.tooManyOptions) {
-      this.setLabels(cursor);
+      this.setLabels();
     }
 
     this.cursor = cursor;
@@ -460,20 +464,10 @@ export class DropDown extends Phaser.GameObjects.Container {
     return true;
   }
 
-  setLabels(cursor: number) {
-    if (cursor === 0 && this.lastCursor === this.totalOptions - 1) {
-      this.firstShown = 0;
-    } else if (cursor === this.totalOptions - 1 && this.lastCursor === 0) {
-      this.firstShown = this.totalOptions - this.shownOptions;
-    } else if (cursor - this.firstShown >= this.shownOptions && cursor > this.lastCursor) {
-      this.firstShown += 1;
-    } else if (cursor < this.firstShown && cursor < this.lastCursor) {
-      this.firstShown -= 1;
-    }
-
-    // Rely exclusively on RexUI to recalculate child coordinates based on visibility
+  setLabels() {
+    const firstShown = this.dropDownScrollBar.getCurrentRow();
     this.options.forEach((option, index) => {
-      if (index < this.firstShown || index >= this.firstShown + this.shownOptions) {
+      if (index < firstShown || index >= firstShown + this.shownOptions) {
         this.optionButtons.hide(option);
       } else {
         this.optionButtons.show(option);
@@ -481,7 +475,6 @@ export class DropDown extends Phaser.GameObjects.Container {
     });
 
     this.optionButtons.layout();
-    this.dropDownScrollBar.setScrollCursor(cursor);
   }
 
   /**
