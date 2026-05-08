@@ -1830,4 +1830,28 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
       exitCallback();
     }
   }
+
+  protected override canInteractWithGrid(): boolean {
+    if (!super.canInteractWithGrid()) {
+      return false;
+    }
+    if (this.showingTray) {
+      return false;
+    }
+    if (this.blockOpenPage) {
+      return false;
+    }
+    return true;
+  }
+
+  protected override isGridFocused(): boolean {
+    return super.isGridFocused() && !this.filterTextMode;
+  }
+
+  protected override focusGrid(): void {
+    super.focusGrid();
+    if (this.filterTextMode) {
+      this.setFilterTextMode(false);
+    }
+  }
 }

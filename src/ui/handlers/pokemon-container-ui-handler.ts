@@ -30,6 +30,7 @@ import { addTextObject, getTextColor } from "#ui/text";
 import { addWindow } from "#ui/ui-theme";
 import { fixedInt, getLocalizedSpriteKey, randIntRange } from "#utils/common";
 import i18next from "i18next";
+import FixWidthButtons from "phaser3-rex-plugins/templates/ui/fixwidthbuttons/FixWidthButtons";
 
 /** Number of columns and rows of containers in the visible grid. */
 export const COLUMNS = 9;
@@ -79,6 +80,7 @@ export interface PokemonContainerLike extends Phaser.GameObjects.GameObject {
   setPosition(x?: number, y?: number): this;
   readonly x: number;
   readonly y: number;
+  readonly visible: boolean;
 }
 
 /**
@@ -90,6 +92,7 @@ export interface PokemonContainerLike extends Phaser.GameObjects.GameObject {
  */
 export abstract class PokemonContainerUiHandler<TContainer extends PokemonContainerLike> extends MessageUiHandler {
   protected starterSelectContainer: Phaser.GameObjects.Container;
+  protected gridButtons: FixWidthButtons;
   protected starterBoxContainer: Phaser.GameObjects.Container;
 
   protected pokemonContainers: TContainer[] = [];
@@ -193,14 +196,109 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
     for (let i = 0; i < count; i++) {
       const container = this.createContainer(i);
       container.setVisible(false);
-      const pos = calcContainerPosition(i);
-      container.setPosition(pos.x, pos.y);
       this.iconAnimHandler.addOrUpdate(container.icon, PokemonIconAnimMode.NONE);
       this.pokemonContainers.push(container);
-      starterBoxContainer.add(container);
     }
 
+    this.gridButtons = new FixWidthButtons(globalScene, {
+      x: 0,
+      y: 13,
+      width: COLUMNS * 18,
+      space: { item: 0, line: 0 },
+      align: "left",
+      buttons: this.pokemonContainers,
+    }).setOrigin(0, 0);
+    this.gridButtons.layout();
+
+    for (let i = 0; i < count; i++) {
+      const pos = calcContainerPosition(i);
+      this.pokemonContainers[i].setPosition(pos.x, pos.y);
+    }
+
+    starterBoxContainer.add(this.gridButtons);
+
+    this.gridButtons.on("button.over", (_button: PokemonContainerLike, index: number) => {
+      this.onGridButtonHover(index);
+    });
+    this.gridButtons.on("button.click", (_button: PokemonContainerLike, index: number) => {
+      this.onGridButtonClick(index);
+    });
+
     return starterBoxContainer;
+  }
+
+  /**
+   * Whether grid pointer events are allowed to take effect right now.
+   */
+  protected canInteractWithGrid(): boolean {
+    if (this.blockInput) {
+      return false;
+    }
+    if (this.filterBar?.openDropDown) {
+      return false;
+    }
+    if (globalScene.ui.getHandler() !== this) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * @returns whether the keyboard cursor is currently on the grid (as opposed
+   * to the filter bar or some subclass-specific sub-cursor). Subclasses
+   * override to also return false when their own cursors (party / start /
+   * random / filter-text / etc.) are visible.
+   */
+  protected isGridFocused(): boolean {
+    return !this.filterMode && this.cursorObj.visible;
+  }
+
+  /**
+   * Move keyboard focus back onto the grid. Subclasses override to also hide
+   * any of their own focus indicators (party / start / random / form-tray
+   * cursor, filter text mode, …).
+   */
+  protected focusGrid(): void {
+    if (this.filterMode) {
+      this.setFilterMode(false);
+    }
+    this.cursorObj.setVisible(true);
+  }
+
+  /** Pointer hovered the i-th grid button. */
+  protected onGridButtonHover(index: number): void {
+    if (!this.canInteractWithGrid()) {
+      return;
+    }
+    const container = this.pokemonContainers[index];
+    if (!container?.visible) {
+      return;
+    }
+    this.focusGrid();
+    if (this.cursor !== index) {
+      this.setCursor(index);
+    }
+  }
+
+  /** Pointer released over the i-th grid button. */
+  protected onGridButtonClick(index: number): void {
+    if (!this.canInteractWithGrid()) {
+      return;
+    }
+    const container = this.pokemonContainers[index];
+    if (!container?.visible) {
+      return;
+    }
+
+    const alreadySelected = this.isGridFocused() && this.cursor === index;
+    this.focusGrid();
+
+    if (alreadySelected) {
+      this.processInput(Button.ACTION);
+    } else {
+      this.setCursor(index);
+      this.getUi().playSelect();
+    }
   }
 
   /**

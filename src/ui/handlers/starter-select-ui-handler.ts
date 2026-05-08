@@ -2767,4 +2767,20 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
     this.instructionElemGroup.destroy(true);
     */
   }
+
+  protected override isGridFocused(): boolean {
+    return (
+      super.isGridFocused()
+      && !this.partyCursorObj.visible
+      && !this.startCursorObj.visible
+      && !this.randomCursorObj.visible
+    );
+  }
+
+  protected override focusGrid(): void {
+    super.focusGrid();
+    this.partyCursorObj.setVisible(false);
+    this.startCursorObj.setVisible(false);
+    this.randomCursorObj.setVisible(false);
+  }
 }
