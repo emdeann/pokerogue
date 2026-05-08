@@ -312,7 +312,7 @@ export class DropDown extends Phaser.GameObjects.Container {
       );
     }
 
-    this.maxOptions = 19;
+    this.maxOptions = 10;
     this.totalOptions = this.options.length;
     this.tooManyOptions = this.totalOptions > this.maxOptions;
     this.shownOptions = this.tooManyOptions ? this.maxOptions : this.totalOptions;
@@ -363,6 +363,7 @@ export class DropDown extends Phaser.GameObjects.Container {
       click: { mode: "release" },
       origin: 0,
     });
+    this.add(this.optionButtons);
 
     if (this.tooManyOptions) {
       this.options.forEach((option, index) => {
@@ -374,12 +375,22 @@ export class DropDown extends Phaser.GameObjects.Container {
 
     this.optionButtons.layout();
     // Align left of parent after calculating layout
-    this.x = -this.optionButtons.width;
+    this.x = -this.optionButtons.width - 1;
+
+    if (this.tooManyOptions) {
+      this.optionButtons.space.right += 7;
+      this.optionButtons.layout();
+      this.x -= 7;
+      this.dropDownScrollBar = new ScrollBar(this.optionButtons.width - 6, 3, 4, this.optionButtons.height - 6, 1);
+      this.add(this.dropDownScrollBar);
+      this.bringToTop(this.dropDownScrollBar);
+      this.dropDownScrollBar.setTotalRows(this.totalOptions);
+      this.dropDownScrollBar.setScrollCursor(0);
+    }
 
     this.optionButtons.on("button.click", (button: DropDownOption) => {
       const absoluteIndex = this.options.indexOf(button);
-      this.setCursor(absoluteIndex);
-      this.toggleOptionState(absoluteIndex);
+      this.cursor === absoluteIndex ? this.toggleOptionState(absoluteIndex) : this.setCursor(absoluteIndex);
     });
 
     this.optionButtons.on("button.over", (button: DropDownOption) => {
@@ -387,17 +398,10 @@ export class DropDown extends Phaser.GameObjects.Container {
       this.setCursor(absoluteIndex);
     });
 
-    this.optionButtons.layout();
-    this.add(this.optionButtons);
     this.optionButtons.pin(this.cursorObj);
     this.setVisible(false);
 
-    if (this.tooManyOptions) {
-      this.dropDownScrollBar = new ScrollBar(window.width - 3, 5, 5, window.height - 10, 1);
-      this.add(this.dropDownScrollBar);
-      this.dropDownScrollBar.setTotalRows(this.totalOptions);
-      this.dropDownScrollBar.setScrollCursor(0);
-    }
+    this.optionButtons.layout();
   }
 
   getWidth(): number {
