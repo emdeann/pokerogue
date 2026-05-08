@@ -100,9 +100,7 @@ export class ScrollBar extends Phaser.GameObjects.Container {
 
     const row = Math.round((localY / (trackHeight - handleHeight)) * (this.totalRows - this.maxRows));
     const clamped = Phaser.Math.Clamp(row, 0, this.totalRows - this.maxRows);
-    const change = clamped - this.currentRow;
     this.setScrollCursor(clamped);
-    this.onScroll(clamped, change);
   }
 
   /**
@@ -111,8 +109,14 @@ export class ScrollBar extends Phaser.GameObjects.Container {
    * @param scrollCursor how many times the view was scrolled down
    */
   setScrollCursor(scrollCursor: number): void {
+    if (scrollCursor === this.currentRow) {
+      return;
+    }
+
+    const change = this.currentRow - scrollCursor;
     this.currentRow = scrollCursor;
     this.updateHandlePosition();
+    this.onScroll(scrollCursor, change);
   }
 
   /**
@@ -138,5 +142,21 @@ export class ScrollBar extends Phaser.GameObjects.Container {
 
   public getCurrentRow(): number {
     return this.currentRow;
+  }
+
+  public scrollUp(wrap = true): void {
+    if (wrap && this.currentRow === 0) {
+      this.setScrollCursor(this.maxRows - 1);
+    } else {
+      this.setScrollCursor(Math.max(0, this.currentRow - 1));
+    }
+  }
+
+  public scrollDown(wrap = true): void {
+    if (wrap && this.currentRow === this.maxRows - 1) {
+      this.setScrollCursor(0);
+    } else {
+      this.setScrollCursor(Math.min(this.maxRows - 1, this.currentRow + 1));
+    }
   }
 }

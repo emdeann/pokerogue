@@ -454,7 +454,7 @@ describe("UI - Pokedex", () => {
 
     // Filter by gen 2 so we can pan a specific amount.
     pokedexHandler["filterBar"].getFilter(DropDownColumn.GEN).options[2].toggleOptionState();
-    pokedexHandler.updateStarters();
+    pokedexHandler.updateContainers();
     expect(pokedexHandler["filteredPokemonData"].length, "pokemon in gen2").toBe(100);
 
     // Let's try to pan to the right to see what the pokemon it points to is.

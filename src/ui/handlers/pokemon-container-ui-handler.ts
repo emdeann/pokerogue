@@ -74,7 +74,7 @@ export interface PokemonContainerLike extends Phaser.GameObjects.GameObject {
   icon: Phaser.GameObjects.Sprite;
   shinyIcons: Phaser.GameObjects.Image[];
   label: Phaser.GameObjects.Text;
-  starterPassiveBgs: Phaser.GameObjects.Image;
+  passiveBgs: Phaser.GameObjects.Image;
   hiddenAbilityIcon: Phaser.GameObjects.Image;
   favoriteIcon: Phaser.GameObjects.Image;
   classicWinIcon: Phaser.GameObjects.Image;
@@ -98,15 +98,14 @@ export interface PokemonContainerLike extends Phaser.GameObjects.GameObject {
  * @typeParam TContainer - The concrete `PokemonContainer` subtype to render.
  */
 export abstract class PokemonContainerUiHandler<TContainer extends PokemonContainerLike> extends MessageUiHandler {
-  protected starterSelectContainer: Phaser.GameObjects.Container;
+  protected pokemonSelectContainer: Phaser.GameObjects.Container;
   protected gridButtons: FixWidthButtons;
-  protected starterBoxContainer: Phaser.GameObjects.Container;
+  protected pokemonSelectBoxContainer: Phaser.GameObjects.Container;
 
   protected pokemonContainers: TContainer[] = [];
-  protected starterSelectScrollBar: ScrollBar;
+  protected scrollBar: ScrollBar;
   public cursorObj: Phaser.GameObjects.Image;
   protected pokerusCursorObjs: Phaser.GameObjects.Image[] = [];
-  protected scrollCursor = 0;
   protected oldCursor = -1;
 
   protected filterBar: FilterBar;
@@ -114,8 +113,8 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
   protected filterBarCursor = 0;
 
   protected iconAnimHandler: PokemonIconAnimHelper;
-  protected starterSelectMessageBox: Phaser.GameObjects.NineSlice;
-  protected starterSelectMessageBoxContainer: Phaser.GameObjects.Container;
+  protected pokemonSelectSelectMessageBox: Phaser.GameObjects.NineSlice;
+  protected pokemonSelectMessageBoxContainer: Phaser.GameObjects.Container;
   protected blockInput = false;
 
   /**
@@ -143,7 +142,7 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
   protected abstract addExtraFilters(filterBar: FilterBar): void;
 
   /** Called whenever any filter changes. */
-  protected abstract updateStarters(): void;
+  protected abstract updateContainers(): void;
 
   /** Called when the scroll cursor changes. */
   protected abstract updateScroll(): void;
@@ -151,17 +150,17 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
   /**
    * Builds the root container for this handler. Subclasses generally call this
    * from their `setup()` and then add additional widgets to
-   * {@linkcode starterSelectContainer}.
+   * {@linkcode pokemonSelectContainer}.
    */
   protected initRootContainer(): void {
     const sHeight = globalScene.scaledCanvas.height;
     const sWidth = globalScene.scaledCanvas.width;
 
-    this.starterSelectContainer = globalScene.add.container(0, -sHeight).setVisible(false);
-    this.getUi().add(this.starterSelectContainer);
+    this.pokemonSelectContainer = globalScene.add.container(0, -sHeight).setVisible(false);
+    this.getUi().add(this.pokemonSelectContainer);
 
     const bgColor = globalScene.add.rectangle(0, 0, sWidth, sHeight, 0x006860).setOrigin(0);
-    this.starterSelectContainer.add(bgColor);
+    this.pokemonSelectContainer.add(bgColor);
   }
 
   /**
@@ -182,24 +181,22 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
    * @returns The constructed `starterBoxContainer`.
    */
   protected buildGrid(scrollBarHeight = 155): Phaser.GameObjects.Container {
-    const starterBoxContainer = globalScene.add.container(this.speciesContainerX + 6, 9);
-    this.starterBoxContainer = starterBoxContainer;
+    this.pokemonSelectBoxContainer = globalScene.add.container(this.speciesContainerX + 6, 9);
 
-    this.starterSelectScrollBar = new ScrollBar(161, 12, 5, scrollBarHeight, 9, (_v, dv) => {
-      this.scrollCursor += dv;
+    this.scrollBar = new ScrollBar(161, 12, 5, scrollBarHeight, 9, () => {
       this.updateScroll();
       this.setCursor(this.cursor);
     });
-    starterBoxContainer.add(this.starterSelectScrollBar);
+    this.pokemonSelectBoxContainer.add(this.scrollBar);
 
     for (let i = 0; i < POKERUS_STARTER_COUNT; i++) {
       const cursorObj = globalScene.add.image(0, 0, "select_cursor_pokerus").setVisible(false).setOrigin(0);
-      starterBoxContainer.add(cursorObj);
+      this.pokemonSelectBoxContainer.add(cursorObj);
       this.pokerusCursorObjs.push(cursorObj);
     }
 
     this.cursorObj = globalScene.add.image(0, 0, "select_cursor").setOrigin(0);
-    starterBoxContainer.add(this.cursorObj);
+    this.pokemonSelectBoxContainer.add(this.cursorObj);
 
     const count = this.getContainerCount();
     for (let i = 0; i < count; i++) {
@@ -219,7 +216,7 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
     });
     this.gridButtons.layout();
 
-    starterBoxContainer.add(this.gridButtons);
+    this.pokemonSelectBoxContainer.add(this.gridButtons);
 
     this.gridButtons.on("button.over", (_button: PokemonContainerLike, index: number) => {
       this.onGridButtonHover(index);
@@ -228,7 +225,7 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
       this.onGridButtonClick(index);
     });
 
-    return starterBoxContainer;
+    return this.pokemonSelectBoxContainer;
   }
 
   /**
@@ -310,14 +307,14 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
    */
   protected buildMessageBox(): void {
     const sHeight = globalScene.scaledCanvas.height;
-    this.starterSelectMessageBoxContainer = globalScene.add.container(0, sHeight).setVisible(false);
-    this.starterSelectMessageBox = addWindow(1, -1, 318, 28).setOrigin(0, 1);
-    this.starterSelectMessageBoxContainer.add(this.starterSelectMessageBox);
+    this.pokemonSelectMessageBoxContainer = globalScene.add.container(0, sHeight).setVisible(false);
+    this.pokemonSelectSelectMessageBox = addWindow(1, -1, 318, 28).setOrigin(0, 1);
+    this.pokemonSelectMessageBoxContainer.add(this.pokemonSelectSelectMessageBox);
 
     this.message = addTextObject(8, 8, "", TextStyle.WINDOW, { maxLines: 2 }).setOrigin(0);
-    this.starterSelectMessageBoxContainer.add(this.message);
+    this.pokemonSelectMessageBoxContainer.add(this.message);
 
-    this.initPromptSprite(this.starterSelectMessageBoxContainer);
+    this.initPromptSprite(this.pokemonSelectMessageBoxContainer);
   }
 
   /**
@@ -339,7 +336,7 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
     onChange?: () => void;
   }): FilterBar {
     const { x, y = 1, width, height = FILTER_BAR_HEIGHT, maxLabels, leftGap, rightGap, onChange } = opts;
-    const change = onChange ?? (() => this.updateStarters());
+    const change = onChange ?? (() => this.updateContainers());
 
     const filterBar =
       maxLabels !== undefined
@@ -465,23 +462,23 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
     super.showText(text, delay, callback, callbackDelay, prompt, promptDelay);
 
     const singleLine = text?.indexOf("\n") === -1;
-    this.starterSelectMessageBox.setSize(318, singleLine ? 28 : 42);
+    this.pokemonSelectSelectMessageBox.setSize(318, singleLine ? 28 : 42);
 
     if (moveToTop) {
-      this.starterSelectMessageBox.setOrigin(0);
-      this.starterSelectMessageBoxContainer.setY(0);
+      this.pokemonSelectSelectMessageBox.setOrigin(0);
+      this.pokemonSelectMessageBoxContainer.setY(0);
       this.message.setY(4);
     } else {
-      this.starterSelectMessageBoxContainer.setY(globalScene.scaledCanvas.height);
-      this.starterSelectMessageBox.setOrigin(0, 1);
+      this.pokemonSelectMessageBoxContainer.setY(globalScene.scaledCanvas.height);
+      this.pokemonSelectSelectMessageBox.setOrigin(0, 1);
       this.message.setY(singleLine ? -22 : -37);
     }
 
-    this.starterSelectMessageBoxContainer.setVisible(text?.length > 0);
+    this.pokemonSelectMessageBoxContainer.setVisible(text?.length > 0);
   }
 
   public override clearText(): void {
-    this.starterSelectMessageBoxContainer.setVisible(false);
+    this.pokemonSelectMessageBoxContainer.setVisible(false);
     super.clearText();
   }
 
@@ -541,8 +538,8 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
   }
 
   /** Toggle the candy-upgrade icon visibility based on what's available. */
-  protected setUpgradeIcon(starter: TContainer): void {
-    const species = starter.species;
+  protected setUpgradeIcon(container: TContainer): void {
+    const species = container.species;
     const slotVisible = !!species?.speciesId;
     const gameData = this.getGameData();
 
@@ -551,8 +548,8 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
       || globalScene.candyUpgradeNotification === 0
       || species.speciesId !== species.getRootSpeciesId(false)
     ) {
-      starter.candyUpgradeIcon.setVisible(false);
-      starter.candyUpgradeOverlayIcon.setVisible(false);
+      container.candyUpgradeIcon.setVisible(false);
+      container.candyUpgradeOverlayIcon.setVisible(false);
       return;
     }
 
@@ -561,13 +558,13 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
     const sameSpeciesEggAvailable = isSameSpeciesEggAvailable(species.speciesId, gameData);
 
     if (globalScene.candyUpgradeNotification === 1) {
-      starter.candyUpgradeIcon.setVisible(slotVisible && passiveAvailable);
-      starter.candyUpgradeOverlayIcon.setVisible(slotVisible && starter.candyUpgradeIcon.visible);
+      container.candyUpgradeIcon.setVisible(slotVisible && passiveAvailable);
+      container.candyUpgradeOverlayIcon.setVisible(slotVisible && container.candyUpgradeIcon.visible);
     } else if (globalScene.candyUpgradeNotification === 2) {
-      starter.candyUpgradeIcon.setVisible(
+      container.candyUpgradeIcon.setVisible(
         slotVisible && (passiveAvailable || valueReductionAvailable || sameSpeciesEggAvailable),
       );
-      starter.candyUpgradeOverlayIcon.setVisible(slotVisible && starter.candyUpgradeIcon.visible);
+      container.candyUpgradeOverlayIcon.setVisible(slotVisible && container.candyUpgradeIcon.visible);
     }
   }
 

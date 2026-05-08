@@ -297,7 +297,7 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
     filterBar.addFilter(
       DropDownColumn.MISC,
       i18next.t("filterBar:miscFilter"),
-      new DropDown(0, 0, miscOptions, this.updateStarters, DropDownType.RADIAL),
+      new DropDown(0, 0, miscOptions, this.updateContainers, DropDownType.RADIAL),
     );
   }
 
@@ -335,18 +335,18 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
     const pokemonContainerBg = globalScene.add
       .image(this.speciesContainerX + 1, FILTER_BAR_HEIGHT + 2, "starter_container_bg")
       .setOrigin(0);
-    this.starterSelectContainer.add(pokemonContainerBg);
-    this.starterSelectContainer.add(pokemonContainerWindow);
+    this.pokemonSelectContainer.add(pokemonContainerBg);
+    this.pokemonSelectContainer.add(pokemonContainerWindow);
 
     this.filterTextContainer = globalScene.add.container(0, 0);
-    this.filterText = new FilterText(1, FILTER_BAR_HEIGHT + 2, 140, 100, this.updateStarters);
+    this.filterText = new FilterText(1, FILTER_BAR_HEIGHT + 2, 140, 100, this.updateContainers);
     this.filterText.addFilter(FilterTextRow.NAME, i18next.t("filterText:nameField"));
     this.filterText.addFilter(FilterTextRow.MOVE_1, i18next.t("filterText:move1Field"));
     this.filterText.addFilter(FilterTextRow.MOVE_2, i18next.t("filterText:move2Field"));
     this.filterText.addFilter(FilterTextRow.ABILITY_1, i18next.t("filterText:ability1Field"));
     this.filterText.addFilter(FilterTextRow.ABILITY_2, i18next.t("filterText:ability2Field"));
     this.filterTextContainer.add(this.filterText);
-    this.starterSelectContainer.add(this.filterTextContainer);
+    this.pokemonSelectContainer.add(this.filterTextContainer);
 
     this.filterBarContainer = globalScene.add.container(0, 0);
     this.buildFilterBar({
@@ -355,10 +355,10 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
       maxLabels: 2,
       leftGap: 0,
       rightGap: 6,
-      onChange: this.updateStarters,
+      onChange: this.updateContainers,
     });
     this.filterBarContainer.add(this.filterBar);
-    this.starterSelectContainer.add(this.filterBarContainer);
+    this.pokemonSelectContainer.add(this.filterBarContainer);
 
     if (globalScene.uiTheme === UiTheme.DEFAULT) {
       pokemonContainerWindow.setVisible(false);
@@ -367,13 +367,13 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
     this.initIconAnimHandler();
 
     this.pokemonNumberText = addTextObject(6, 141, "", TextStyle.SUMMARY).setOrigin(0);
-    this.starterSelectContainer.add(this.pokemonNumberText);
+    this.pokemonSelectContainer.add(this.pokemonNumberText);
     this.pokemonNameText = addTextObject(6, 128, "", TextStyle.SUMMARY).setOrigin(0);
-    this.starterSelectContainer.add(this.pokemonNameText);
+    this.pokemonSelectContainer.add(this.pokemonNameText);
     this.pokemonFormText = addTextObject(6, 121, "", TextStyle.INSTRUCTIONS_TEXT, {
       fontSize: textSettings.instructionTextSize,
     }).setOrigin(0);
-    this.starterSelectContainer.add(this.pokemonFormText);
+    this.pokemonSelectContainer.add(this.pokemonFormText);
 
     const starterBoxContainer = this.buildGrid(/* default 155 */);
 
@@ -390,17 +390,17 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
     starterBoxContainer.bringToTop(this.formTrayContainer);
     this.formTrayContainer.setVisible(false);
 
-    this.starterSelectContainer.add(starterBoxContainer);
+    this.pokemonSelectContainer.add(starterBoxContainer);
 
     this.pokemonSprite = globalScene.add.sprite(96, 143, "pkmn__sub");
     this.pokemonSprite.setPipeline(globalScene.spritePipeline, { tone: [0, 0, 0, 0], ignoreTimeTint: true });
-    this.starterSelectContainer.add(this.pokemonSprite);
+    this.pokemonSelectContainer.add(this.pokemonSprite);
     this.type1Icon = globalScene.add.sprite(10, 158, getLocalizedSpriteKey("types")).setScale(0.5).setOrigin(0);
     this.type2Icon = globalScene.add.sprite(28, 158, getLocalizedSpriteKey("types")).setScale(0.5).setOrigin(0);
-    this.starterSelectContainer.add([this.type1Icon, this.type2Icon]);
+    this.pokemonSelectContainer.add([this.type1Icon, this.type2Icon]);
 
     this.buildMessageBox();
-    this.starterSelectContainer.add(this.starterSelectMessageBoxContainer);
+    this.pokemonSelectContainer.add(this.pokemonSelectMessageBoxContainer);
 
     this.showFormTrayIconElement = new Phaser.GameObjects.Sprite(globalScene, 6, 168, "keyboard", "F.png");
     this.showFormTrayIconElement.setName("sprite-showFormTray-icon-element");
@@ -418,14 +418,14 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
     this.showFormTrayLabel.setName("text-showFormTray-label");
     this.showFormTrayIconElement.setVisible(false);
     this.showFormTrayLabel.setVisible(false);
-    this.starterSelectContainer.add(this.showFormTrayIconElement);
-    this.starterSelectContainer.add(this.showFormTrayLabel);
+    this.pokemonSelectContainer.add(this.showFormTrayIconElement);
+    this.pokemonSelectContainer.add(this.showFormTrayLabel);
 
-    this.starterSelectContainer.bringToTop(this.filterBarContainer);
-    this.initTutorialOverlay(this.starterSelectContainer);
-    this.starterSelectContainer.bringToTop(this.starterSelectMessageBoxContainer);
-    this.starterSelectContainer.bringToTop(this.pokemonNameText);
-    this.starterSelectContainer.bringToTop(this.pokemonFormText);
+    this.pokemonSelectContainer.bringToTop(this.filterBarContainer);
+    this.initTutorialOverlay(this.pokemonSelectContainer);
+    this.pokemonSelectContainer.bringToTop(this.pokemonSelectMessageBoxContainer);
+    this.pokemonSelectContainer.bringToTop(this.pokemonNameText);
+    this.pokemonSelectContainer.bringToTop(this.pokemonFormText);
   }
 
   show(args: any[]): boolean {
@@ -449,9 +449,9 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
 
     super.show(args);
 
-    this.starterSelectContainer.setVisible(true);
+    this.pokemonSelectContainer.setVisible(true);
 
-    this.getUi().bringToTop(this.starterSelectContainer);
+    this.getUi().bringToTop(this.pokemonSelectContainer);
 
     this.pokemonContainers.forEach(container => {
       const icon = container.icon;
@@ -463,7 +463,7 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
     });
 
     this.resetFilters();
-    this.updateStarters();
+    this.updateContainers();
 
     this.setFilterMode(false);
     this.filterBarCursor = 0;
@@ -548,7 +548,7 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
     const maxColumns = 9;
     const numberOfStarters = this.filteredPokemonData.length;
     const numOfRows = Math.ceil(numberOfStarters / maxColumns);
-    const onScreenFirstIndex = this.scrollCursor * maxColumns; // this is first index on the screen
+    const onScreenFirstIndex = this.scrollBar.getCurrentRow() * maxColumns; // this is first index on the screen
     // TODO: check if in some places we need to use one or the other
     const currentRow = Math.floor((onScreenFirstIndex + this.cursor) / maxColumns);
 
@@ -566,7 +566,7 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
         success = true;
       } else if (this.filterMode && !this.filterBar.getFilter(this.filterBarCursor).hasDefaultValues()) {
         this.filterBar.resetSelection(this.filterBarCursor);
-        this.updateStarters();
+        this.updateContainers();
         success = true;
       } else if (
         this.filterTextMode
@@ -632,15 +632,19 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
           } else if (numberOfStarters > 0) {
             // UP from filter bar to bottom of Pokemon list
             this.setFilterMode(false);
-            this.scrollCursor = Math.max(0, numOfRows - 9);
-            this.updateScroll();
+            this.scrollBar.setScrollCursor(Math.max(0, numOfRows - 9));
             const proportion = this.filterBarCursor / Math.max(1, this.filterBar.numFilters - 1);
             const targetCol = Math.min(8, proportion < 0.5 ? Math.floor(proportion * 8) : Math.ceil(proportion * 8));
             if (numberOfStarters % 9 > targetCol) {
-              this.setCursor(numberOfStarters - (numberOfStarters % 9) + targetCol - this.scrollCursor * 9);
+              this.setCursor(
+                numberOfStarters - (numberOfStarters % 9) + targetCol - this.scrollBar.getCurrentRow() * 9,
+              );
             } else {
               this.setCursor(
-                Math.max(numberOfStarters - (numberOfStarters % 9) + targetCol - 9 - this.scrollCursor * 9, 0),
+                Math.max(
+                  numberOfStarters - (numberOfStarters % 9) + targetCol - 9 - this.scrollBar.getCurrentRow() * 9,
+                  0,
+                ),
               );
             }
             success = true;
@@ -652,8 +656,7 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
           } else if (numberOfStarters > 0) {
             // DOWN from filter bar to top of Pokemon list
             this.setFilterMode(false);
-            this.scrollCursor = 0;
-            this.updateScroll();
+            this.scrollBar.setScrollCursor(0);
             const proportion = this.filterBarCursor / Math.max(1, this.filterBar.numFilters - 1);
             const targetCol = Math.min(8, proportion < 0.5 ? Math.floor(proportion * 8) : Math.ceil(proportion * 8));
             this.setCursor(Math.min(targetCol, numberOfStarters - 1));
@@ -775,41 +778,41 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
       switch (button) {
         case Button.UP:
           if (currentRow > 0) {
-            if (this.scrollCursor > 0 && currentRow - this.scrollCursor === 0) {
-              this.scrollCursor--;
-              this.updateScroll();
-              success = this.setCursor(this.cursor);
-            } else {
-              success = this.setCursor(this.cursor - 9);
+            if (currentRow - this.scrollBar.getCurrentRow() === 0) {
+              this.scrollBar.scrollDown();
+              success = true;
+              break;
             }
-          } else {
-            this.filterBarCursor = this.filterBar.getNearestFilter(this.pokemonContainers[this.cursor]);
-            this.setFilterMode(true);
-            success = true;
+            success = this.setCursor(this.cursor - 9);
+            break;
           }
+          this.filterBarCursor = this.filterBar.getNearestFilter(this.pokemonContainers[this.cursor]);
+          this.setFilterMode(true);
+          success = true;
           break;
         case Button.DOWN:
           if (currentRow < numOfRows - 1 && this.cursor + 9 < this.filteredPokemonData.length) {
             // not last row
-            if (currentRow - this.scrollCursor === 8) {
+            if (currentRow - this.scrollBar.getCurrentRow() === 8) {
               // last row of visible pokemon
-              this.scrollCursor++;
-              this.updateScroll();
-              success = this.setCursor(this.cursor);
-            } else {
-              success = this.setCursor(this.cursor + 9);
+              this.scrollBar.scrollDown();
+              success = true;
+              break;
             }
-          } else if (numOfRows > 1) {
-            // DOWN from last row of pokemon > Wrap around to first row
-            this.scrollCursor = 0;
-            this.updateScroll();
-            success = this.setCursor(this.cursor % 9);
-          } else {
-            // DOWN from single row of pokemon > Go to filters
-            this.filterBarCursor = this.filterBar.getNearestFilter(this.pokemonContainers[this.cursor]);
-            this.setFilterMode(true);
-            success = true;
+            success = this.setCursor(this.cursor + 9);
+            break;
           }
+
+          if (numOfRows > 1) {
+            // DOWN from last row of pokemon > Wrap around to first row
+            this.scrollBar.setScrollCursor(0);
+            success = true;
+            break;
+          }
+          // DOWN from single row of pokemon > Go to filters
+          this.filterBarCursor = this.filterBar.getNearestFilter(this.pokemonContainers[this.cursor]);
+          this.setFilterMode(true);
+          success = true;
           break;
         case Button.LEFT:
           if (this.cursor % 9 !== 0) {
@@ -918,8 +921,8 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
   }
 
   // TODO: why does this need to be `() => {}` in order to not crash?
-  updateStarters = () => {
-    this.scrollCursor = 0;
+  updateContainers = () => {
+    this.scrollBar.setScrollCursor(0);
     this.filteredPokemonData = [];
 
     this.pokerusCursorObjs.forEach(cursor => cursor.setVisible(false));
@@ -1146,8 +1149,8 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
       }
     }
 
-    this.starterSelectScrollBar.setTotalRows(Math.max(Math.ceil(this.filteredPokemonData.length / 9), 1));
-    this.starterSelectScrollBar.setScrollCursor(0);
+    this.scrollBar.setTotalRows(Math.max(Math.ceil(this.filteredPokemonData.length / 9), 1));
+    this.scrollBar.setScrollCursor(0);
 
     // sort
     const sort = this.filterBar.getVals(DropDownColumn.SORT)[0];
@@ -1198,9 +1201,9 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
 
   updateScroll = () => {
     const maxColumns = 9;
-    const onScreenFirstIndex = this.scrollCursor * maxColumns;
+    const onScreenFirstIndex = this.scrollBar.getCurrentRow() * maxColumns;
 
-    this.starterSelectScrollBar.setScrollCursor(this.scrollCursor);
+    this.scrollBar.setScrollCursor(this.scrollBar.getCurrentRow());
 
     this.pokerusCursorObjs.forEach(cursorObj => cursorObj.setVisible(false));
 
@@ -1287,9 +1290,7 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
             }
           }
 
-          container.starterPassiveBgs.setVisible(
-            !!this.gameData.starterData[getStarterSpeciesId(speciesId)].passiveAttr,
-          );
+          container.passiveBgs.setVisible(!!this.gameData.starterData[getStarterSpeciesId(speciesId)].passiveAttr);
           container.hiddenAbilityIcon.setVisible(
             !!caughtAttr && !!(this.gameData.starterData[getStarterSpeciesId(speciesId)].abilityAttr & 4),
           );
@@ -1321,7 +1322,7 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
           for (let v = 0; v < 3; v++) {
             container.shinyIcons[v].setVisible(false);
           }
-          container.starterPassiveBgs.setVisible(false);
+          container.passiveBgs.setVisible(false);
           container.hiddenAbilityIcon.setVisible(false);
           container.classicWinIcon.setVisible(false);
           container.favoriteIcon.setVisible(false);
@@ -1817,7 +1818,7 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
     this.oldCursor = -1;
     globalScene.ui.hideTooltip();
 
-    this.starterSelectContainer.setVisible(false);
+    this.pokemonSelectContainer.setVisible(false);
     this.blockInput = false;
 
     // sanitize exit callback so it does not leak into future calls

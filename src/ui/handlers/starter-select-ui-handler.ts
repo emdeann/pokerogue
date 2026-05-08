@@ -208,7 +208,7 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
     filterBar.addFilter(
       DropDownColumn.MISC,
       i18next.t("filterBar:miscFilter"),
-      new DropDown(0, 0, miscOptions, () => this.updateStarters(), DropDownType.RADIAL),
+      new DropDown(0, 0, miscOptions, () => this.updateContainers(), DropDownType.RADIAL),
     );
   }
 
@@ -265,7 +265,7 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
       y: globalScene.scaledCanvas.height - MoveInfoOverlay.getHeight() - 29,
     });
 
-    this.starterSelectContainer.add([
+    this.pokemonSelectContainer.add([
       starterSelectBg,
       starterDexNoLabel,
       starterContainerBg,
@@ -273,13 +273,13 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
       starterBoxContainer,
       this.starterSummary,
       this.instructionsContainer,
-      this.starterSelectMessageBoxContainer,
+      this.pokemonSelectMessageBoxContainer,
       this.moveInfoOverlay,
       this.filterBar,
     ]);
 
-    this.initTutorialOverlay(this.starterSelectContainer);
-    this.starterSelectContainer.bringToTop(this.starterSelectMessageBoxContainer);
+    this.initTutorialOverlay(this.pokemonSelectContainer);
+    this.pokemonSelectContainer.bringToTop(this.pokemonSelectMessageBoxContainer);
 
     globalScene.eventTarget.addEventListener(BattleSceneEventType.CANDY_UPGRADE_NOTIFICATION_CHANGED, e =>
       this.onCandyUpgradeDisplayChanged(e),
@@ -374,7 +374,7 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
       super.show(args);
       this.starterSelectCallback = args[0] as StarterSelectCallback;
 
-      this.starterSelectContainer.setVisible(true);
+      this.pokemonSelectContainer.setVisible(true);
 
       this.starterPreferences = loadStarterPreferences();
       // Deep copy the JSON (avoid re-loading from disk)
@@ -399,7 +399,7 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
       this.starterSummary.applyChallengeVisibility();
 
       this.resetFilters();
-      this.updateStarters();
+      this.updateContainers();
 
       this.setFilterMode(false);
       this.filterBarCursor = 0;
@@ -484,19 +484,19 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
 
     const singleLine = text?.indexOf("\n") === -1;
 
-    this.starterSelectMessageBox.setSize(318, singleLine ? 28 : 42);
+    this.pokemonSelectSelectMessageBox.setSize(318, singleLine ? 28 : 42);
 
     if (moveToTop) {
-      this.starterSelectMessageBox.setOrigin(0);
-      this.starterSelectMessageBoxContainer.setY(0);
+      this.pokemonSelectSelectMessageBox.setOrigin(0);
+      this.pokemonSelectMessageBoxContainer.setY(0);
       this.message.setY(4);
     } else {
-      this.starterSelectMessageBoxContainer.setY(globalScene.scaledCanvas.height);
-      this.starterSelectMessageBox.setOrigin(0, 1);
+      this.pokemonSelectMessageBoxContainer.setY(globalScene.scaledCanvas.height);
+      this.pokemonSelectSelectMessageBox.setOrigin(0, 1);
       this.message.setY(singleLine ? -22 : -37);
     }
 
-    this.starterSelectMessageBoxContainer.setVisible(text?.length > 0);
+    this.pokemonSelectMessageBoxContainer.setVisible(text?.length > 0);
   }
 
   /**
@@ -642,7 +642,7 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
           } else {
             this.filterBar.resetSelection(this.filterBarCursor);
           }
-          this.updateStarters();
+          this.updateContainers();
           success = true;
         } else if (this.showIvsMode) {
           this.toggleShowIvsMode(false);
@@ -672,15 +672,18 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
         } else if (numberOfStarters > 0) {
           // UP from filter bar to bottom of Pokemon list
           this.setFilterMode(false);
-          this.scrollCursor = Math.max(0, numOfRows - 9);
+          this.scrollBar.setScrollCursor(Math.max(0, numOfRows - 9));
           this.updateScroll();
           const proportion = (this.filterBarCursor + 0.5) / this.filterBar.numFilters;
           const targetCol = Math.min(8, Math.floor(proportion * 11));
           if (numberOfStarters % 9 > targetCol) {
-            this.setCursor(numberOfStarters - (numberOfStarters % 9) + targetCol - this.scrollCursor * 9);
+            this.setCursor(numberOfStarters - (numberOfStarters % 9) + targetCol - this.scrollBar.getCurrentRow() * 9);
           } else {
             this.setCursor(
-              Math.max(numberOfStarters - (numberOfStarters % 9) + targetCol - 9 - this.scrollCursor * 9, 0),
+              Math.max(
+                numberOfStarters - (numberOfStarters % 9) + targetCol - 9 - this.scrollBar.getCurrentRow() * 9,
+                0,
+              ),
             );
           }
           success = true;
@@ -698,8 +701,7 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
         } else if (numberOfStarters > 0) {
           // DOWN from filter bar to top of Pokemon list
           this.setFilterMode(false);
-          this.scrollCursor = 0;
-          this.updateScroll();
+          this.scrollBar.setScrollCursor(0);
           const proportion = this.filterBarCursor / Math.max(1, this.filterBar.numFilters - 1);
           const targetCol = Math.min(8, Math.floor(proportion * 11));
           this.setCursor(Math.min(targetCol, numberOfStarters - 1));
@@ -717,7 +719,7 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
     let error = false;
 
     const numberOfStarters = this.filteredStarterIds.length;
-    const onScreenFirstIndex = this.scrollCursor * COLUMNS;
+    const onScreenFirstIndex = this.scrollBar.getCurrentRow() * COLUMNS;
     const onScreenLastIndex = Math.min(this.filteredStarterIds.length - onScreenFirstIndex - 1, ROWS * COLUMNS - 1); // this is the last starter index on the screen
     const onScreenNumberOfRows = Math.ceil(onScreenLastIndex / COLUMNS);
 
@@ -1117,7 +1119,7 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
 
     const numberOfStarters = this.filteredStarterIds.length;
     const numOfRows = Math.ceil(numberOfStarters / COLUMNS);
-    const onScreenFirstIndex = this.scrollCursor * COLUMNS; // this is first starter index on the screen
+    const onScreenFirstIndex = this.scrollBar.getCurrentRow() * COLUMNS; // this is first starter index on the screen
     const onScreenLastIndex = Math.min(this.filteredStarterIds.length - onScreenFirstIndex - 1, ROWS * COLUMNS - 1); // this is the last starter index on the screen
     const currentRow = Math.floor((onScreenFirstIndex + this.cursor) / COLUMNS);
     const onScreenCurrentRow = Math.floor(this.cursor / COLUMNS);
@@ -1125,14 +1127,12 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
     switch (button) {
       case Button.UP:
         if (currentRow > 0) {
-          if (this.scrollCursor > 0 && currentRow - this.scrollCursor === 0) {
-            this.scrollCursor--;
-            this.updateScroll();
-            this.setCursor(this.cursor);
+          if (Math.floor(this.cursor / 9) === 0) {
+            this.scrollBar.scrollUp();
             success = true;
-          } else {
-            success = this.setCursor(this.cursor - 9);
+            break;
           }
+          success = this.setCursor(this.cursor - 9);
         } else {
           this.filterBarCursor = this.filterBar.getNearestFilter(this.starterContainers[this.cursor]);
           this.setFilterMode(true);
@@ -1141,21 +1141,12 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
         break;
       case Button.DOWN:
         if (currentRow < numOfRows - 1 && this.cursor + 9 < this.filteredStarterIds.length) {
-          // not last row
-          if (currentRow - this.scrollCursor === 8) {
-            // last row of visible starters
-            this.scrollCursor++;
-            this.updateScroll();
-            this.setCursor(this.cursor);
+          if (Math.floor(this.cursor / 9) === 8) {
+            this.scrollBar.scrollDown();
             success = true;
-          } else {
-            success = this.setCursor(this.cursor + 9);
+            break;
           }
-        } else if (numOfRows > 1) {
-          // DOWN from last row of Pokemon > Wrap around to first row
-          this.scrollCursor = 0;
-          this.updateScroll();
-          success = this.setCursor(this.cursor % 9);
+          success = this.setCursor(this.cursor + 9);
         } else {
           // DOWN from single row of Pokemon > Go to filters
           this.filterBarCursor = this.filterBar.getNearestFilter(this.starterContainers[this.cursor]);
@@ -1593,7 +1584,7 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
               // update the passive background and icon/animation for available upgrade
               if (starterContainer) {
                 this.updateCandyUpgradeDisplay(starterContainer);
-                starterContainer.starterPassiveBgs.setVisible(!!starterData.passiveAttr);
+                starterContainer.passiveBgs.setVisible(!!starterData.passiveAttr);
               }
               return true;
             }
@@ -1723,7 +1714,7 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
               const persistentStarterData = globalScene.gameData.starterData[this.lastStarterId];
               this.updateCandyUpgradeDisplay(starterContainer);
               this.updateStarterValueLabel(starterContainer);
-              starterContainer.starterPassiveBgs.setVisible(
+              starterContainer.passiveBgs.setVisible(
                 !!persistentStarterData.passiveAttr && !globalScene.gameMode.hasChallenge(Challenges.FRESH_START),
               );
               this.setStarter(this.lastStarterId);
@@ -1976,15 +1967,15 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
     this.instructionsContainer.updateInstructions(this.canCycle, !!dexEntry.caughtAttr, this.filterMode);
   }
 
-  protected updateStarters(): void {
-    this.scrollCursor = 0;
+  protected updateContainers(): void {
+    this.scrollBar.setScrollCursor(0);
 
     this.filterBar.updateFilterLabels();
 
     this.filterStarters();
 
-    this.starterSelectScrollBar.setTotalRows(Math.max(Math.ceil(this.filteredStarterIds.length / 9), 1));
-    this.starterSelectScrollBar.setScrollCursor(0);
+    this.scrollBar.setTotalRows(Math.max(Math.ceil(this.filteredStarterIds.length / 9), 1));
+    this.scrollBar.setScrollCursor(0);
 
     const sort = this.filterBar.getVals(DropDownColumn.SORT)[0];
     sortSpecies(this.filteredStarterIds, sort.val, sort.dir);
@@ -2030,9 +2021,9 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
   }
 
   protected updateScroll(): void {
-    const onScreenFirstIndex = this.scrollCursor * COLUMNS;
+    const onScreenFirstIndex = this.scrollBar.getCurrentRow() * COLUMNS;
 
-    this.starterSelectScrollBar.setScrollCursor(this.scrollCursor);
+    this.scrollBar.setScrollCursor(this.scrollBar.getCurrentRow());
 
     this.pokerusCursorObjs.forEach(cursor => cursor.setVisible(false));
     this.starterCursorObjs.forEach(cursor => cursor.setVisible(false));
@@ -2099,7 +2090,7 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
           }
         }
 
-        container.starterPassiveBgs.setVisible(!!starterDataEntry.passiveAttr);
+        container.passiveBgs.setVisible(!!starterDataEntry.passiveAttr);
         container.hiddenAbilityIcon.setVisible(!!dexEntry.caughtAttr && !!(starterDataEntry.abilityAttr & 4));
         container.classicWinIcon
           .setVisible(starterDataEntry.classicWinCount > 0)
@@ -2472,7 +2463,7 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
       if (this.filteredStarterIds.length > 0) {
         // Back to the first Pokemon if there is one
         this.cursorObj.setVisible(true);
-        this.setCursor(this.scrollCursor * 9);
+        this.setCursor(this.scrollBar.getCurrentRow() * 9);
       } else {
         // Back to filters
         this.filterBarCursor = Math.max(1, this.filterBar.numFilters - 1);
@@ -2670,7 +2661,7 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
   }
 
   public override clearText(): void {
-    this.starterSelectMessageBoxContainer.setVisible(false);
+    this.pokemonSelectMessageBoxContainer.setVisible(false);
     super.clearText();
   }
 
@@ -2720,7 +2711,7 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
 
     this.starterSummary.clear();
 
-    this.starterSelectContainer.setVisible(false);
+    this.pokemonSelectContainer.setVisible(false);
     this.blockInput = false;
 
     while (this.partyStarterIds.length > 0) {

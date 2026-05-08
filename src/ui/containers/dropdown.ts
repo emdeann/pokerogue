@@ -259,7 +259,7 @@ export class DropDown extends Phaser.GameObjects.Container {
   private onChange: () => void;
   private lastDir: SortDirection = SortDirection.ASC;
   private defaultSettings: any[];
-  private dropDownScrollBar: ScrollBar;
+  private readonly scrollBar: ScrollBar;
   private totalOptions = 0;
   private maxOptions = 0;
   private shownOptions = 0;
@@ -378,7 +378,7 @@ export class DropDown extends Phaser.GameObjects.Container {
       this.optionButtons.space.right += 7;
       this.optionButtons.layout();
       this.x -= 7;
-      this.dropDownScrollBar = new ScrollBar(
+      this.scrollBar = new ScrollBar(
         this.optionButtons.width - 6,
         3,
         4,
@@ -386,10 +386,10 @@ export class DropDown extends Phaser.GameObjects.Container {
         this.maxOptions,
         (_v, dv) => this.setCursor(this.cursor + dv),
       );
-      this.add(this.dropDownScrollBar);
-      this.bringToTop(this.dropDownScrollBar);
-      this.dropDownScrollBar.setTotalRows(this.totalOptions);
-      this.dropDownScrollBar.setScrollCursor(0);
+      this.add(this.scrollBar);
+      this.bringToTop(this.scrollBar);
+      this.scrollBar.setTotalRows(this.totalOptions);
+      this.scrollBar.setScrollCursor(0);
     }
 
     this.optionButtons.on("button.click", (button: DropDownOption) => {
@@ -465,7 +465,7 @@ export class DropDown extends Phaser.GameObjects.Container {
   }
 
   setLabels() {
-    const firstShown = this.dropDownScrollBar.getCurrentRow();
+    const firstShown = this.scrollBar.getCurrentRow();
     this.options.forEach((option, index) => {
       if (index < firstShown || index >= firstShown + this.shownOptions) {
         this.optionButtons.hide(option);

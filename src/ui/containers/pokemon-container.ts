@@ -15,7 +15,7 @@ export abstract class PokemonContainer extends Label {
   public icon: Phaser.GameObjects.Sprite;
   public shinyIcons: Phaser.GameObjects.Image[] = [];
   public label: Phaser.GameObjects.Text;
-  public starterPassiveBgs: Phaser.GameObjects.Image;
+  public passiveBgs: Phaser.GameObjects.Image;
   public hiddenAbilityIcon: Phaser.GameObjects.Image;
   public favoriteIcon: Phaser.GameObjects.Image;
   public classicWinIcon: Phaser.GameObjects.Image;
@@ -56,7 +56,7 @@ export abstract class PokemonContainer extends Label {
       .setScale(0.75)
       .setVisible(false);
     this.content.add(starterPassiveBg);
-    this.starterPassiveBgs = starterPassiveBg;
+    this.passiveBgs = starterPassiveBg;
 
     for (let i = 0; i < 3; i++) {
       const shinyIcon = globalScene.add
