@@ -40,7 +40,7 @@ import { achvs } from "#system/achv";
 import { RibbonData } from "#system/ribbons/ribbon-data";
 import type { DexAttrProps, Starter, StarterMoveset, StarterPreferences } from "#types/save-data";
 import type { OptionSelectItem } from "#ui/abstract-option-select-ui-handler";
-import { DropDown, DropDownLabel, DropDownOption, DropDownState, DropDownType } from "#ui/dropdown";
+import { DropDown, DropDownLabel, DropDownState, DropDownType } from "#ui/dropdown";
 import type { FilterBar } from "#ui/filter-bar";
 import { MoveInfoOverlay } from "#ui/move-info-overlay";
 import { PokemonContainerUiHandler } from "#ui/pokemon-container-ui-handler";
@@ -199,11 +199,11 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
       new DropDownLabel(i18next.t("filterBar:hasPokerus"), undefined, DropDownState.ON),
     ];
     const miscOptions = [
-      new DropDownOption("FAVORITE", favoriteLabels),
-      new DropDownOption("WIN", winLabels),
-      new DropDownOption("HIDDEN_ABILITY", hiddenAbilityLabels),
-      new DropDownOption("EGG", eggLabels),
-      new DropDownOption("POKERUS", pokerusLabels),
+      { key: "FAVORITE", labels: favoriteLabels },
+      { key: "WIN", labels: winLabels },
+      { key: "HIDDEN_ABILITY", labels: hiddenAbilityLabels },
+      { key: "EGG", labels: eggLabels },
+      { key: "POKERUS", labels: pokerusLabels },
     ];
     filterBar.addFilter(
       DropDownColumn.MISC,
@@ -465,7 +465,7 @@ export class StarterSelectUiHandler extends PokemonContainerUiHandler<StarterCon
     // initial setting, in caught filter, select the options excluding the uncaught option
     for (let i = 0; i < caughtDropDown.options.length; i++) {
       // if the option is not "ALL" or "UNCAUGHT", toggle it
-      if (caughtDropDown.options[i].val !== "ALL" && caughtDropDown.options[i].val !== "UNCAUGHT") {
+      if (caughtDropDown.options[i].key !== "ALL" && caughtDropDown.options[i].key !== "UNCAUGHT") {
         caughtDropDown.toggleOptionState(i);
       }
     }

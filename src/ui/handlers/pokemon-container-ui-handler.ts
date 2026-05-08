@@ -13,7 +13,14 @@ import { getVariantIcon, getVariantTint, type Variant } from "#sprites/variant";
 import type { GameData } from "#system/game-data";
 import type { DexEntry } from "#types/dex-data";
 import type { StarterPreferences } from "#types/save-data";
-import { DropDown, DropDownLabel, DropDownOption, DropDownState, DropDownType, SortCriteria } from "#ui/dropdown";
+import {
+  DropDown,
+  DropDownLabel,
+  type DropDownOptionParams,
+  DropDownState,
+  DropDownType,
+  SortCriteria,
+} from "#ui/dropdown";
 import { FilterBar } from "#ui/filter-bar";
 import { MessageUiHandler } from "#ui/message-ui-handler";
 import { POKEMON_CONTAINER_WIDTH, type PokemonContainer } from "#ui/pokemon-container";
@@ -337,10 +344,10 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
         ? new FilterBar(x, y, width, height, maxLabels, leftGap ?? 0, rightGap ?? 0)
         : new FilterBar(x, y, width, height);
 
-    const genOptions: DropDownOption[] = Array.from(
-      { length: 9 },
-      (_, i) => new DropDownOption(i + 1, new DropDownLabel(i18next.t(`starterSelectUiHandler:gen${i + 1}`))),
-    );
+    const genOptions: DropDownOptionParams[] = Array.from({ length: 9 }, (_, i) => ({
+      key: i + 1,
+      labels: new DropDownLabel(i18next.t(`starterSelectUiHandler:gen${i + 1}`)),
+    }));
     filterBar.addFilter(
       DropDownColumn.GEN,
       i18next.t("filterBar:genFilter"),
@@ -348,7 +355,7 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
     );
 
     const typeKeys = Object.keys(PokemonType).filter(v => Number.isNaN(Number(v)));
-    const typeOptions: DropDownOption[] = [];
+    const typeOptions: DropDownOptionParams[] = [];
     typeKeys.forEach((type, index) => {
       if (index === 0 || index === 19) {
         return;
@@ -356,7 +363,7 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
       const typeSprite = globalScene.add.sprite(0, 0, getLocalizedSpriteKey("types"));
       typeSprite.setScale(0.5);
       typeSprite.setFrame(type.toLowerCase());
-      typeOptions.push(new DropDownOption(index, new DropDownLabel("", typeSprite)));
+      typeOptions.push({ key: index, labels: new DropDownLabel("", typeSprite) });
     });
     filterBar.addFilter(
       DropDownColumn.TYPES,
@@ -377,12 +384,12 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
         .setFrame(getVariantIcon(v as Variant))
         .setTint(getVariantTint(v as Variant)),
     );
-    const caughtOptions = [
-      new DropDownOption("SHINY3", new DropDownLabel("", shinySprites[2])),
-      new DropDownOption("SHINY2", new DropDownLabel("", shinySprites[1])),
-      new DropDownOption("SHINY", new DropDownLabel("", shinySprites[0])),
-      new DropDownOption("NORMAL", new DropDownLabel(i18next.t("filterBar:normal"))),
-      new DropDownOption("UNCAUGHT", new DropDownLabel(i18next.t("filterBar:uncaught"))),
+    const caughtOptions: DropDownOptionParams[] = [
+      { key: "SHINY3", labels: new DropDownLabel("", shinySprites[2]) },
+      { key: "SHINY2", labels: new DropDownLabel("", shinySprites[1]) },
+      { key: "SHINY", labels: new DropDownLabel("", shinySprites[0]) },
+      { key: "NORMAL", labels: new DropDownLabel(i18next.t("filterBar:normal")) },
+      { key: "UNCAUGHT", labels: new DropDownLabel(i18next.t("filterBar:uncaught")) },
     ];
     filterBar.addFilter(
       DropDownColumn.CAUGHT,
@@ -404,9 +411,9 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
       new DropDownLabel(i18next.t("filterBar:costReductionUnlockable"), undefined, DropDownState.UNLOCKABLE),
       new DropDownLabel(i18next.t("filterBar:costReductionLocked"), undefined, DropDownState.EXCLUDE),
     ];
-    const unlocksOptions = [
-      new DropDownOption("PASSIVE", passiveLabels),
-      new DropDownOption("COST_REDUCTION", costReductionLabels),
+    const unlocksOptions: DropDownOptionParams[] = [
+      { key: "PASSIVE", labels: passiveLabels },
+      { key: "COST_REDUCTION", labels: costReductionLabels },
     ];
     filterBar.addFilter(
       DropDownColumn.UNLOCKS,
@@ -416,17 +423,17 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
 
     this.addExtraFilters(filterBar);
 
-    const sortOptions = [
-      new DropDownOption(
-        SortCriteria.NUMBER,
-        new DropDownLabel(i18next.t("filterBar:sortByNumber"), undefined, DropDownState.ON),
-      ),
-      new DropDownOption(SortCriteria.COST, new DropDownLabel(i18next.t("filterBar:sortByCost"))),
-      new DropDownOption(SortCriteria.CANDY, new DropDownLabel(i18next.t("filterBar:sortByCandies"))),
-      new DropDownOption(SortCriteria.IV, new DropDownLabel(i18next.t("filterBar:sortByIVs"))),
-      new DropDownOption(SortCriteria.NAME, new DropDownLabel(i18next.t("filterBar:sortByName"))),
-      new DropDownOption(SortCriteria.CAUGHT, new DropDownLabel(i18next.t("filterBar:sortByNumCaught"))),
-      new DropDownOption(SortCriteria.HATCHED, new DropDownLabel(i18next.t("filterBar:sortByNumHatched"))),
+    const sortOptions: DropDownOptionParams[] = [
+      {
+        key: SortCriteria.NUMBER,
+        labels: new DropDownLabel(i18next.t("filterBar:sortByNumber"), undefined, DropDownState.ON),
+      },
+      { key: SortCriteria.COST, labels: new DropDownLabel(i18next.t("filterBar:sortByCost")) },
+      { key: SortCriteria.CANDY, labels: new DropDownLabel(i18next.t("filterBar:sortByCandies")) },
+      { key: SortCriteria.IV, labels: new DropDownLabel(i18next.t("filterBar:sortByIVs")) },
+      { key: SortCriteria.NAME, labels: new DropDownLabel(i18next.t("filterBar:sortByName")) },
+      { key: SortCriteria.CAUGHT, labels: new DropDownLabel(i18next.t("filterBar:sortByNumCaught")) },
+      { key: SortCriteria.HATCHED, labels: new DropDownLabel(i18next.t("filterBar:sortByNumHatched")) },
     ];
     filterBar.addFilter(
       DropDownColumn.SORT,

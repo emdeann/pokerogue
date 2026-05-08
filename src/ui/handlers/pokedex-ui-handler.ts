@@ -23,7 +23,7 @@ import { SettingKeyboard } from "#system/settings-keyboard";
 import type { DexEntry } from "#types/dex-data";
 import type { DexAttrProps, StarterPreferences } from "#types/save-data";
 import type { OptionSelectConfig } from "#ui/abstract-option-select-ui-handler";
-import { DropDown, DropDownLabel, DropDownOption, DropDownState, DropDownType, SortCriteria } from "#ui/dropdown";
+import { DropDown, DropDownLabel, DropDownState, DropDownType, SortCriteria } from "#ui/dropdown";
 import type { FilterBar } from "#ui/filter-bar";
 import { FilterText, FilterTextRow } from "#ui/filter-text";
 import { PokedexMonContainer } from "#ui/pokedex-mon-container";
@@ -285,14 +285,14 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
       new DropDownLabel(i18next.t("filterBar:hasPokerus"), undefined, DropDownState.ON),
     ];
     const miscOptions = [
-      new DropDownOption("STARTER", starters),
-      new DropDownOption("FAVORITE", favoriteLabels),
-      new DropDownOption("WIN", winLabels),
-      new DropDownOption("HIDDEN_ABILITY", hiddenAbilityLabels),
-      new DropDownOption("SEEN_SPECIES", seenSpeciesLabels),
-      new DropDownOption("ENCOUNTERED_SPECIES", encounteredSpeciesLabels),
-      new DropDownOption("EGG", eggLabels),
-      new DropDownOption("POKERUS", pokerusLabels),
+      { key: "STARTER", labels: starters },
+      { key: "FAVORITE", labels: favoriteLabels },
+      { key: "WIN", labels: winLabels },
+      { key: "HIDDEN_ABILITY", labels: hiddenAbilityLabels },
+      { key: "SEEN_SPECIES", labels: seenSpeciesLabels },
+      { key: "ENCOUNTERED_SPECIES", labels: encounteredSpeciesLabels },
+      { key: "EGG", labels: eggLabels },
+      { key: "POKERUS", labels: pokerusLabels },
     ];
     filterBar.addFilter(
       DropDownColumn.MISC,
@@ -302,14 +302,11 @@ export class PokedexUiHandler extends PokemonContainerUiHandler<PokedexMonContai
   }
 
   protected override addExtraFiltersBeforeCaught(filterBar: FilterBar, change: () => void): void {
-    const biomeOptions = Object.values(BiomeId).map(
-      (biomeValue, index) =>
-        new DropDownOption(
-          index,
-          new DropDownLabel(i18next.t(`biome:${toCamelCase(enumValueToKey(BiomeId, biomeValue))}`)),
-        ),
-    );
-    biomeOptions.push(new DropDownOption(biomeOptions.length, new DropDownLabel(i18next.t("filterBar:uncatchable"))));
+    const biomeOptions = Object.values(BiomeId).map((biomeValue, index) => ({
+      key: index,
+      labels: new DropDownLabel(i18next.t(`biome:${toCamelCase(enumValueToKey(BiomeId, biomeValue))}`)),
+    }));
+    biomeOptions.push({ key: biomeOptions.length, labels: new DropDownLabel(i18next.t("filterBar:uncatchable")) });
     filterBar.addFilter(
       DropDownColumn.BIOME,
       i18next.t("filterBar:biomeFilter"),
