@@ -139,8 +139,6 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
 
   /**
    * Add filters that aren't part of the shared set.
-   * Called from {@linkcode buildFilterBar} after the shared filters have
-   * been added but before {@linkcode FilterBar.offsetHybridFilters}.
    */
   protected abstract addExtraFilters(filterBar: FilterBar): void;
 
@@ -441,7 +439,6 @@ export abstract class PokemonContainerUiHandler<TContainer extends PokemonContai
       new DropDown(0, 0, sortOptions, change, DropDownType.SINGLE),
     );
 
-    filterBar.offsetHybridFilters();
     this.filterBar = filterBar;
     return filterBar;
   }

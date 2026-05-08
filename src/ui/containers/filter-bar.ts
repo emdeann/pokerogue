@@ -3,7 +3,6 @@ import type { DropDownColumn } from "#enums/drop-down-column";
 import { TextStyle } from "#enums/text-style";
 import type { UiTheme } from "#enums/ui-theme";
 import type { DropDown } from "#ui/dropdown";
-import { DropDownType } from "#ui/dropdown";
 import type { StarterContainer } from "#ui/starter-container";
 import { addTextObject, getTextColor } from "#ui/text";
 import { addWindow, WindowVariant } from "#ui/ui-theme";
@@ -120,21 +119,6 @@ export class FilterBar extends Phaser.GameObjects.Container {
       } else {
         const lastRight = this.labels[i - 1].x + this.labels[i - 1].displayWidth;
         this.labels[i].x = lastRight + spacing + this.cursorOffset;
-      }
-
-      this.dropDowns[i].x = this.labels[i].x - this.cursorOffset - this.leftPaddingX;
-      this.dropDowns[i].y = this.height;
-    }
-  }
-
-  /**
-   * Move the leftmost dropdown to the left of the FilterBar instead of below it
-   */
-  offsetHybridFilters(): void {
-    for (const dropDown of this.dropDowns) {
-      if (dropDown.dropDownType === DropDownType.HYBRID) {
-        dropDown.x = -dropDown.getWidth();
-        dropDown.y = 0;
       }
     }
   }

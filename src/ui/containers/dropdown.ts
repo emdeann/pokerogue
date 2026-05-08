@@ -322,19 +322,15 @@ export class DropDown extends Phaser.GameObjects.Container {
 
     this.defaultSettings = this.getSettings();
 
-    // Setup local configuration relative to the Buttons layout
     this.options.forEach(option => {
       const toggleVisibility = type !== DropDownType.SINGLE || option.state === DropDownState.ON;
       option.updateToggleIcon(toggleVisibility);
 
-      // We explicitly size and allow interaction for the RexUI Buttons sizer
       option.setMinHeight(this.optionHeight);
 
-      // Coordinates are now 0-based relative to the option container
       const localBaseX = 0;
       const localBaseY = this.optionHeight / 2;
 
-      //option.setLabelPosition(localBaseX + 8, localBaseY);
       if (type === DropDownType.SINGLE) {
         option.setTogglePosition(localBaseX + 3, localBaseY + 1);
       } else {
@@ -344,9 +340,18 @@ export class DropDown extends Phaser.GameObjects.Container {
       this.firstShown = 0;
     });
 
-    const baseX = cursorOffset + this.optionPaddingX + 3;
+    const window = addWindow(
+      0,
+      0,
+      50,
+      this.options[this.shownOptions - 1].y + this.optionHeight + this.optionPaddingY,
+      false,
+      false,
+      undefined,
+      undefined,
+      WindowVariant.XTHIN,
+    );
 
-    // Use RexUI Buttons to handle stacking, visibility gaps, and click/hover events
     this.optionButtons = new Buttons(globalScene, {
       orientation: "y",
       space: {
@@ -357,10 +362,9 @@ export class DropDown extends Phaser.GameObjects.Container {
         right: this.optionPaddingX,
       },
       buttons: this.options,
+      background: window,
       click: { mode: "release" },
-      align: "right",
       origin: 0,
-      x: baseX,
     });
 
     if (this.tooManyOptions) {
@@ -371,12 +375,11 @@ export class DropDown extends Phaser.GameObjects.Container {
       });
     }
 
-    // Initial layout calculation required to get proper child bounds
     this.optionButtons.layout();
+    // Align left of parent after calculating layout
+    this.x = -this.optionButtons.width;
 
-    // Map the RexUI button click/over events to original functionality
     this.optionButtons.on("button.click", (button: DropDownOption) => {
-      // Find the absolute index in our main options array
       const absoluteIndex = this.options.indexOf(button);
       this.setCursor(absoluteIndex);
       this.toggleOptionState(absoluteIndex);
@@ -387,20 +390,6 @@ export class DropDown extends Phaser.GameObjects.Container {
       this.setCursor(absoluteIndex);
     });
 
-    // We can now calculate the window height reliably based on the sizer's child Y post-layout
-    const window = addWindow(
-      0,
-      0,
-      50,
-      this.optionButtons.y + this.options[this.shownOptions - 1].y + this.optionHeight + this.optionPaddingY,
-      false,
-      false,
-      undefined,
-      undefined,
-      WindowVariant.XTHIN,
-    );
-
-    this.optionButtons.addBackground(window);
     this.optionButtons.layout();
     this.add(this.optionButtons);
     this.add(this.cursorObj);
