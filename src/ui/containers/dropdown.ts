@@ -428,6 +428,23 @@ export class DropDown extends Phaser.GameObjects.Container {
     return this.setCursor(this.defaultCursor);
   }
 
+  public incCursor(): void {
+    if (this.cursor - this.shownOptions + 1 === this.scrollBar.getCurrentRow()) {
+      this.scrollBar.scrollDown();
+      return;
+    }
+    this.setCursor(this.cursor + 1);
+  }
+
+  public decCursor(): void {
+    if (this.cursor === this.scrollBar.getCurrentRow()) {
+      this.scrollBar.scrollUp();
+      return;
+    }
+
+    this.setCursor(this.cursor - 1);
+  }
+
   setCursor(cursor: number): boolean {
     if (this.tooManyOptions) {
       this.setLabels();
