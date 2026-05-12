@@ -256,26 +256,19 @@ export class AchvsUiHandler extends MessageUiHandler {
 
   /**
    * Update the visual cursor position and details based on the helper's current cursor state
-   * @param _pageChange whether this is part of a page/mode change that requires visual updates
+   * @param pageChange whether this is part of a page/mode change that requires visual updates
    */
   private updateCursorPosition(pageChange?: boolean): void {
     const cursor = this.gridHelper.getCursor();
-
-    let update = false;
 
     if (!this.cursorObj) {
       this.cursorObj = globalScene.add
         .nineslice(0, 0, "select_cursor_highlight", undefined, 16, 16, 1, 1, 1, 1)
         .setOrigin(0);
       this.iconsContainer.add(this.cursorObj);
-      update = true;
     }
 
     this.cursorObj.setPositionRelative(this.icons[cursor], 0, 0);
-    if (!update && !pageChange) {
-      return;
-    }
-
     const itemOffset = this.gridHelper.getItemOffset();
     switch (this.currentPage) {
       case Page.ACHIEVEMENTS:
