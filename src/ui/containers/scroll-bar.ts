@@ -5,14 +5,14 @@ import { globalScene } from "#app/global-scene";
  * and number of elements that can be shown on screen
  */
 export class ScrollBar extends Phaser.GameObjects.Container {
-  private bg: Phaser.GameObjects.NineSlice;
-  private handleBody: Phaser.GameObjects.Rectangle;
-  private handleBottom: Phaser.GameObjects.NineSlice;
+  private readonly bg: Phaser.GameObjects.NineSlice;
+  private readonly handleBody: Phaser.GameObjects.Rectangle;
+  private readonly handleBottom: Phaser.GameObjects.NineSlice;
+  private readonly displayRows: number;
+  private readonly top: number;
+  private readonly onScroll: (v: number, dv: number) => void;
   private currentRow: number;
   private totalRows: number;
-  private maxRows: number;
-  private top: number;
-  private onScroll: (v: number, dv: number) => void;
   private grabOffsetY = 0;
 
   /**
@@ -33,7 +33,7 @@ export class ScrollBar extends Phaser.GameObjects.Container {
     super(globalScene, x, y);
 
     this.top = this.getWorldPoint().y;
-    this.maxRows = maxRows;
+    this.displayRows = maxRows;
     this.totalRows = maxRows;
     this.currentRow = 0;
 
@@ -98,9 +98,8 @@ export class ScrollBar extends Phaser.GameObjects.Container {
       trackHeight - handleHeight, // stop when handle bottom hits the track bottom
     );
 
-    const row = Math.round((localY / (trackHeight - handleHeight)) * (this.totalRows - this.maxRows));
-    const clamped = Phaser.Math.Clamp(row, 0, this.totalRows - this.maxRows);
-    this.setScrollCursor(clamped);
+    const row = Math.round((localY / (trackHeight - handleHeight)) * (this.totalRows - this.displayRows));
+    this.setScrollCursor(Phaser.Math.Clamp(row, 0, this.totalRows - this.displayRows));
   }
 
   /**
@@ -128,10 +127,10 @@ export class ScrollBar extends Phaser.GameObjects.Container {
   setTotalRows(rows: number): void {
     this.totalRows = rows;
     this.handleBody.height =
-      ((this.bg.displayHeight - 1 - this.handleBottom.displayHeight) * this.maxRows) / this.totalRows;
+      ((this.bg.displayHeight - 1 - this.handleBottom.displayHeight) * this.displayRows) / this.totalRows;
     this.updateHandlePosition();
 
-    this.setVisible(this.totalRows > this.maxRows);
+    this.setVisible(this.totalRows > this.displayRows);
   }
 
   private updateHandlePosition(): void {
@@ -146,17 +145,17 @@ export class ScrollBar extends Phaser.GameObjects.Container {
 
   public scrollUp(wrap = true): void {
     if (wrap && this.currentRow === 0) {
-      this.setScrollCursor(this.maxRows - 1);
+      this.setScrollCursor(this.totalRows - 1);
     } else {
       this.setScrollCursor(Math.max(0, this.currentRow - 1));
     }
   }
 
   public scrollDown(wrap = true): void {
-    if (wrap && this.currentRow === this.maxRows - 1) {
+    if (wrap && this.currentRow === this.totalRows - 1) {
       this.setScrollCursor(0);
     } else {
-      this.setScrollCursor(Math.min(this.maxRows - 1, this.currentRow + 1));
+      this.setScrollCursor(Math.min(this.totalRows - 1, this.currentRow + 1));
     }
   }
 }

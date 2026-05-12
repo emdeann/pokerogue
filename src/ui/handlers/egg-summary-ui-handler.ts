@@ -7,7 +7,6 @@ import { HatchedPokemonContainer } from "#ui/hatched-pokemon-container";
 import { MessageUiHandler } from "#ui/message-ui-handler";
 import { PokemonHatchInfoContainer } from "#ui/pokemon-hatch-info-container";
 import { PokemonIconAnimHelper, PokemonIconAnimMode } from "#ui/pokemon-icon-anim-helper";
-import { ScrollBar } from "#ui/scroll-bar";
 import { ScrollableGridHelper } from "#ui/scrollable-grid-helper";
 
 const iconContainerX = 112;
@@ -88,17 +87,15 @@ export class EggSummaryUiHandler extends MessageUiHandler {
     this.infoContainer.setVisible(true);
     this.summaryContainer.add(this.infoContainer);
 
-    const scrollBar = new ScrollBar(
+    this.scrollGridHandler = new ScrollableGridHelper(
+      numRows,
+      numCols,
       iconContainerX + numCols * iconSize,
       iconContainerY + 3,
       4,
       globalScene.scaledCanvas.height - 20,
-      numRows,
-    );
-    this.summaryContainer.add(scrollBar);
-
-    this.scrollGridHandler = new ScrollableGridHelper(this, numRows, numCols)
-      .withScrollBar(scrollBar)
+    )
+      .withCursorCallback(() => this.updateCursorPosition())
       .withUpdateGridCallBack(() => this.updatePokemonIcons())
       .withUpdateSingleElementCallback((i: number) => this.infoContainer.showHatchInfo(this.eggHatchData[i]));
 
@@ -173,7 +170,7 @@ export class EggSummaryUiHandler extends MessageUiHandler {
 
     this.scrollGridHandler.setTotalElements(this.eggHatchData.length);
     this.updatePokemonIcons();
-    this.setCursor(0);
+    this.updateCursorPosition();
 
     globalScene.playSoundWithoutBgm("evolution_fanfare");
 
@@ -214,6 +211,34 @@ export class EggSummaryUiHandler extends MessageUiHandler {
     }
   }
 
+  /**
+   * Update the visual cursor position and details based on the helper's current cursor state
+   */
+  private updateCursorPosition(): void {
+    const cursor = this.scrollGridHandler.getCursor();
+
+    if (cursor === undefined || cursor < 0) {
+      return;
+    }
+
+    const lastCursor = this.cursor;
+    const changed = super.setCursor(cursor);
+
+    if (changed) {
+      this.cursorObj.setPosition(
+        iconContainerX - 1 + iconSize * (cursor % numCols),
+        iconContainerY + 1 + iconSize * Math.floor(cursor / numCols),
+      );
+
+      if (lastCursor > -1) {
+        this.iconAnimHandler.addOrUpdate(this.pokemonContainers[lastCursor].icon, PokemonIconAnimMode.NONE);
+      }
+      this.iconAnimHandler.addOrUpdate(this.pokemonContainers[cursor].icon, PokemonIconAnimMode.ACTIVE);
+
+      this.infoContainer.showHatchInfo(this.eggHatchData[cursor + this.scrollGridHandler.getItemOffset()]);
+    }
+  }
+
   processInput(button: Button): boolean {
     const ui = this.getUi();
 
@@ -230,7 +255,7 @@ export class EggSummaryUiHandler extends MessageUiHandler {
         success = true;
       }
     } else {
-      this.scrollGridHandler.processInput(button);
+      success = this.scrollGridHandler.processInput(button);
     }
 
     if (success) {
@@ -242,27 +267,14 @@ export class EggSummaryUiHandler extends MessageUiHandler {
     return success || error;
   }
 
-  setCursor(cursor: number): boolean {
-    let changed = false;
-
-    const lastCursor = this.cursor;
-
-    changed = super.setCursor(cursor);
-
-    if (changed) {
-      this.cursorObj.setPosition(
-        iconContainerX - 1 + iconSize * (cursor % numCols),
-        iconContainerY + 1 + iconSize * Math.floor(cursor / numCols),
-      );
-
-      if (lastCursor > -1) {
-        this.iconAnimHandler.addOrUpdate(this.pokemonContainers[lastCursor].icon, PokemonIconAnimMode.NONE);
-      }
-      this.iconAnimHandler.addOrUpdate(this.pokemonContainers[cursor].icon, PokemonIconAnimMode.ACTIVE);
-
-      this.infoContainer.showHatchInfo(this.eggHatchData[cursor + this.scrollGridHandler.getItemOffset()]);
-    }
-
-    return changed;
+  /**
+   * This method now delegates to the grid helper for cursor state.
+   * @param _cursor the cursor position (ignored - for compatibility only)
+   * @param _pageChange whether this is a page change
+   * @returns always true for compatibility
+   */
+  setCursor(_cursor: number, _pageChange?: boolean): boolean {
+    this.updateCursorPosition();
+    return true;
   }
 }

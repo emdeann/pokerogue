@@ -4,7 +4,6 @@ import { TextStyle } from "#enums/text-style";
 import { UiMode } from "#enums/ui-mode";
 import { MessageUiHandler } from "#ui/message-ui-handler";
 import { PokemonIconAnimHelper, PokemonIconAnimMode } from "#ui/pokemon-icon-anim-helper";
-import { ScrollBar } from "#ui/scroll-bar";
 import { ScrollableGridHelper } from "#ui/scrollable-grid-helper";
 import { addTextObject } from "#ui/text";
 import { addWindow } from "#ui/ui-theme";
@@ -62,10 +61,8 @@ export class EggListUiHandler extends MessageUiHandler {
 
     this.eggSprite = globalScene.add.sprite(54, 37, "egg");
 
-    const scrollBar = new ScrollBar(310, 5, 4, 170, this.ROWS);
-
-    this.scrollGridHandler = new ScrollableGridHelper(this, this.ROWS, this.COLUMNS)
-      .withScrollBar(scrollBar)
+    this.scrollGridHandler = new ScrollableGridHelper(this.ROWS, this.COLUMNS, 310, 5, 4, 170)
+      .withCursorCallback(() => this.updateCursorPosition())
       .withUpdateGridCallBack(() => this.updateEggIcons())
       .withUpdateSingleElementCallback((i: number) => this.setEggDetails(i));
 
@@ -93,7 +90,6 @@ export class EggListUiHandler extends MessageUiHandler {
       this.eggListIconContainer,
       this.cursorObj,
       this.eggSprite,
-      scrollBar,
     ]);
   }
 
@@ -109,7 +105,7 @@ export class EggListUiHandler extends MessageUiHandler {
     this.scrollGridHandler.setTotalElements(globalScene.gameData.eggs.length);
 
     this.updateEggIcons();
-    this.setCursor(0);
+    this.updateCursorPosition();
 
     return true;
   }
@@ -138,7 +134,7 @@ export class EggListUiHandler extends MessageUiHandler {
     const indexOffset = this.scrollGridHandler.getItemOffset();
     const eggsToShow = Math.min(this.eggIcons.length, globalScene.gameData.eggs.length - indexOffset);
     this.eggIcons.forEach((icon, i) => {
-      if (i !== this.cursor) {
+      if (i !== this.scrollGridHandler.getCursor()) {
         this.iconAnimHandler.addOrUpdate(icon, PokemonIconAnimMode.NONE);
       }
       if (i < eggsToShow) {
@@ -170,6 +166,32 @@ export class EggListUiHandler extends MessageUiHandler {
     this.eggGachaInfoText.setText(egg.getEggTypeDescriptor());
   }
 
+  /**
+   * Update the visual cursor position and details based on the helper's current cursor state
+   */
+  private updateCursorPosition(): void {
+    const cursor = this.scrollGridHandler.getCursor();
+
+    if (cursor === undefined || cursor < 0) {
+      return;
+    }
+
+    const lastCursor = this.cursor;
+    const changed = super.setCursor(cursor);
+
+    if (changed) {
+      const icon = this.eggIcons[cursor];
+      this.cursorObj.setPositionRelative(icon, 114, 5);
+
+      if (lastCursor > -1) {
+        this.iconAnimHandler.addOrUpdate(this.eggIcons[lastCursor], PokemonIconAnimMode.NONE);
+      }
+      this.iconAnimHandler.addOrUpdate(icon, PokemonIconAnimMode.ACTIVE);
+
+      this.setEggDetails(cursor + this.scrollGridHandler.getItemOffset());
+    }
+  }
+
   processInput(button: Button): boolean {
     const ui = this.getUi();
 
@@ -189,26 +211,15 @@ export class EggListUiHandler extends MessageUiHandler {
     return success;
   }
 
-  setCursor(cursor: number): boolean {
-    let changed = false;
-
-    const lastCursor = this.cursor;
-
-    changed = super.setCursor(cursor);
-
-    if (changed) {
-      const icon = this.eggIcons[cursor];
-      this.cursorObj.setPositionRelative(icon, 114, 5);
-
-      if (lastCursor > -1) {
-        this.iconAnimHandler.addOrUpdate(this.eggIcons[lastCursor], PokemonIconAnimMode.NONE);
-      }
-      this.iconAnimHandler.addOrUpdate(icon, PokemonIconAnimMode.ACTIVE);
-
-      this.setEggDetails(cursor + this.scrollGridHandler.getItemOffset());
-    }
-
-    return changed;
+  /**
+   * This method now delegates to the grid helper for cursor state.
+   * @param _cursor the cursor position (ignored - for compatibility only)
+   * @param _pageChange whether this is a page change
+   * @returns always true for compatibility
+   */
+  setCursor(_cursor: number, _pageChange?: boolean): boolean {
+    this.updateCursorPosition();
+    return true;
   }
 
   clear(): void {

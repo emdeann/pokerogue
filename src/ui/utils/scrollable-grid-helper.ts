@@ -1,55 +1,78 @@
 import { Button } from "#enums/buttons";
-import type { ScrollBar } from "#ui/scroll-bar";
-import type { UiHandler } from "#ui/ui-handler";
+import { ScrollBar } from "#ui/scroll-bar";
 
 type UpdateGridCallbackFunction = () => void;
 type UpdateDetailsCallbackFunction = (index: number) => void;
 
 /**
  * A helper class to handle navigation through a grid of elements that can scroll vertically
- * Needs to be used by a {@linkcode UiHandler}
+ * Uses callbacks to communicate with consumers rather than maintaining direct references
  * How to use:
- * - in `UiHandler.setup`: Initialize with the {@linkcode UiHandler} that handles the grid,
- * the number of rows and columns that can be shown at once,
- * an optional {@linkcode ScrollBar}, and optional callbacks that will get called after scrolling
+ * - in `UiHandler.setup`: Initialize with the grid dimensions and positioning,
+ * then use chainable methods to set up callbacks for grid/detail updates
  * - in `UiHandler.show`: Set `setTotalElements` to the total number of elements in the list to display
- * - in `UiHandler.processInput`: call `processNavigationInput` to have it handle the cursor updates while calling the defined callbacks
+ * - in `UiHandler.processInput`: call `processInput` to have it handle the cursor updates
  * - in `UiHandler.clear`: call `reset`
  */
 export class ScrollableGridHelper {
   private readonly ROWS: number;
   private readonly COLUMNS: number;
-  private handler: UiHandler;
   private totalElements: number;
   private cursor: number;
-  private scrollCursor: number;
-  private scrollBar?: ScrollBar;
+  private readonly scrollBar: ScrollBar;
   /** Optional function that will get called if the whole grid needs to get updated */
   private updateGridCallback?: UpdateGridCallbackFunction;
   /** Optional function that will get called if a single element's information needs to get updated */
   private updateDetailsCallback?: UpdateDetailsCallbackFunction;
+  /** Optional function that will get called when the cursor changes */
+  private cursorUpdateCallback?: (cursor: number) => void;
+  private silentScroll: boolean;
 
   /**
    * @param rows the maximum number of rows shown at once
    * @param columns the maximum number of columns shown at once
+   * @param x the scrollbar's x position (origin: top left)
+   * @param y the scrollbar's y position (origin: top left)
+   * @param width the scrollbar's width
+   * @param height the scrollbar's height
    */
-  constructor(handler: UiHandler, rows: number, columns: number) {
-    this.handler = handler;
+  constructor(rows: number, columns: number, x: number, y: number, width: number, height: number) {
     this.ROWS = rows;
     this.COLUMNS = columns;
-    this.scrollCursor = 0;
     this.cursor = 0;
-    this.totalElements = rows * columns; // default value for the number of elements
+    this.totalElements = rows * columns;
+    this.silentScroll = false;
+
+    this.scrollBar = new ScrollBar(x, y, width, height, rows, (newRow: number) => {
+      if (!this.silentScroll) {
+        this.handleScrollChange(newRow);
+      }
+    });
   }
 
   /**
-   * Set a scrollBar to get updated with the scrolling
-   * @param scrollBar {@linkcode ScrollBar}
+   * Get the ScrollBar instance managed by this helper
+   * @returns the ScrollBar
+   */
+  getScrollBar(): ScrollBar {
+    return this.scrollBar;
+  }
+
+  /**
+   * Get the current cursor position within the visible grid
+   * @returns the cursor position (0-based index within displayed rows)
+   */
+  getCursor(): number {
+    return this.cursor;
+  }
+
+  /**
+   * Set a callback for when the cursor position changes
+   * @param callback function to call with the new cursor position
    * @returns this
    */
-  withScrollBar(scrollBar: ScrollBar): ScrollableGridHelper {
-    this.scrollBar = scrollBar;
-    this.scrollBar.setTotalRows(Math.ceil(this.totalElements / this.COLUMNS));
+  withCursorCallback(callback: (cursor: number) => void): ScrollableGridHelper {
+    this.cursorUpdateCallback = callback;
     return this;
   }
 
@@ -64,7 +87,7 @@ export class ScrollableGridHelper {
   }
 
   /**
-   * Set function that will get called if a single element in the grid needs to get updated
+   * Set function that will get called if a single element's information needs to get updated
    * @param callback {@linkcode UpdateDetailsCallbackFunction}
    * @returns this
    */
@@ -76,19 +99,107 @@ export class ScrollableGridHelper {
   /**
    * @param totalElements the total number of elements that the grid needs to display
    */
-  setTotalElements(totalElements: number) {
+  setTotalElements(totalElements: number): void {
     this.totalElements = totalElements;
-    if (this.scrollBar) {
-      this.scrollBar.setTotalRows(Math.ceil(this.totalElements / this.COLUMNS));
-    }
-    this.setScrollCursor(0);
+    this.scrollBar.setTotalRows(Math.ceil(this.totalElements / this.COLUMNS));
+    this.silentScroll = true;
+    this.scrollBar.setScrollCursor(0);
+    this.silentScroll = false;
+    this.cursor = 0;
   }
 
   /**
    * @returns how many elements are hidden due to scrolling
    */
   getItemOffset(): number {
-    return this.scrollCursor * this.COLUMNS;
+    return this.scrollBar.getCurrentRow() * this.COLUMNS;
+  }
+
+  /**
+   * Get the current scroll row (page) from the scrollbar
+   * @returns the current scroll row
+   */
+  getScrollRow(): number {
+    return this.scrollBar.getCurrentRow();
+  }
+
+  /**
+   * Handle scroll changes from the ScrollBar
+   * @param newRow the new scroll row
+   */
+  private handleScrollChange(newRow: number): void {
+    const itemOffset = newRow * this.COLUMNS;
+    const maxCursor = Math.min(this.cursor, this.totalElements - itemOffset - 1);
+
+    if (maxCursor !== this.cursor) {
+      this.setCursor(maxCursor);
+    } else if (this.updateDetailsCallback) {
+      this.updateDetailsCallback(this.cursor + itemOffset);
+    }
+
+    if (this.updateGridCallback) {
+      this.updateGridCallback();
+    }
+  }
+
+  private processUpInput(
+    scrollCursor: number,
+    maxScrollCursor: number,
+    currentRowIndex: number,
+    onScreenRows: number,
+    lastVisibleIndex: number,
+  ): boolean {
+    if (currentRowIndex > 0) {
+      return this.setCursor(this.cursor - this.COLUMNS);
+    }
+    if (scrollCursor > 0) {
+      return this.setScrollCursor(scrollCursor - 1);
+    }
+    let newCursor = this.cursor + (onScreenRows - 1) * this.COLUMNS;
+    if (newCursor > lastVisibleIndex) {
+      newCursor -= this.COLUMNS;
+    }
+    return this.setScrollCursor(maxScrollCursor, newCursor);
+  }
+
+  private processDownInput(
+    scrollCursor: number,
+    maxScrollCursor: number,
+    currentRowIndex: number,
+    onScreenRows: number,
+    itemOffset: number,
+  ): boolean {
+    if (currentRowIndex < onScreenRows - 1) {
+      return this.setCursor(Math.min(this.cursor + this.COLUMNS, this.totalElements - itemOffset - 1));
+    }
+    if (scrollCursor < maxScrollCursor) {
+      return this.setScrollCursor(scrollCursor + 1);
+    }
+    return this.setScrollCursor(0, this.cursor % this.COLUMNS);
+  }
+
+  private processLeftInput(
+    scrollCursor: number,
+    maxScrollCursor: number,
+    currentRowIndex: number,
+    currentColumnIndex: number,
+    onScreenRows: number,
+    lastVisibleIndex: number,
+  ): boolean {
+    if (currentColumnIndex > 0) {
+      return this.setCursor(this.cursor - 1);
+    }
+    if (scrollCursor === maxScrollCursor && currentRowIndex === onScreenRows - 1) {
+      return this.setCursor(lastVisibleIndex);
+    }
+    return this.setCursor(this.cursor + this.COLUMNS - 1);
+  }
+
+  private processRightInput(currentColumnIndex: number, itemOffset: number): boolean {
+    if (currentColumnIndex < this.COLUMNS - 1 && this.cursor + itemOffset < this.totalElements - 1) {
+      return this.setCursor(this.cursor + 1);
+    }
+    return this.setCursor(this.cursor - currentColumnIndex);
   }
 
   /**
@@ -98,98 +209,80 @@ export class ScrollableGridHelper {
    */
   processInput(button: Button): boolean {
     let success = false;
+    const scrollCursor = this.scrollBar.getCurrentRow();
     const onScreenRows = Math.min(this.ROWS, Math.ceil(this.totalElements / this.COLUMNS));
     const maxScrollCursor = Math.max(0, Math.ceil(this.totalElements / this.COLUMNS) - onScreenRows);
     const currentRowIndex = Math.floor(this.cursor / this.COLUMNS);
     const currentColumnIndex = this.cursor % this.COLUMNS;
-    const itemOffset = this.scrollCursor * this.COLUMNS;
+    const itemOffset = scrollCursor * this.COLUMNS;
     const lastVisibleIndex = Math.min(this.totalElements - 1, this.totalElements - maxScrollCursor * this.COLUMNS - 1);
+
     switch (button) {
       case Button.UP:
-        if (currentRowIndex > 0) {
-          success = this.setCursor(this.cursor - this.COLUMNS);
-        } else if (this.scrollCursor > 0) {
-          success = this.setScrollCursor(this.scrollCursor - 1);
-        } else {
-          // wrap around to the last row
-          let newCursor = this.cursor + (onScreenRows - 1) * this.COLUMNS;
-          if (newCursor > lastVisibleIndex) {
-            newCursor -= this.COLUMNS;
-          }
-          success = this.setScrollCursor(maxScrollCursor, newCursor);
-        }
+        success = this.processUpInput(scrollCursor, maxScrollCursor, currentRowIndex, onScreenRows, lastVisibleIndex);
         break;
       case Button.DOWN:
-        if (currentRowIndex < onScreenRows - 1) {
-          // Go down one row
-          success = this.setCursor(Math.min(this.cursor + this.COLUMNS, this.totalElements - itemOffset - 1));
-        } else if (this.scrollCursor < maxScrollCursor) {
-          // Scroll down one row
-          success = this.setScrollCursor(this.scrollCursor + 1);
-        } else {
-          // Wrap around to the top row
-          success = this.setScrollCursor(0, this.cursor % this.COLUMNS);
-        }
+        success = this.processDownInput(scrollCursor, maxScrollCursor, currentRowIndex, onScreenRows, itemOffset);
         break;
       case Button.LEFT:
-        if (currentColumnIndex > 0) {
-          success = this.setCursor(this.cursor - 1);
-        } else if (this.scrollCursor === maxScrollCursor && currentRowIndex === onScreenRows - 1) {
-          success = this.setCursor(lastVisibleIndex);
-        } else {
-          success = this.setCursor(this.cursor + this.COLUMNS - 1);
-        }
+        this.processLeftInput(
+          scrollCursor,
+          maxScrollCursor,
+          currentRowIndex,
+          currentColumnIndex,
+          onScreenRows,
+          lastVisibleIndex,
+        );
         break;
       case Button.RIGHT:
-        if (currentColumnIndex < this.COLUMNS - 1 && this.cursor + itemOffset < this.totalElements - 1) {
-          success = this.setCursor(this.cursor + 1);
-        } else {
-          success = this.setCursor(this.cursor - currentColumnIndex);
-        }
+        this.processRightInput(currentColumnIndex, itemOffset);
         break;
     }
     return success;
   }
 
   /**
-   * Reset the scrolling
+   * Reset the scrolling and cursor position
    */
   reset(): void {
-    this.setScrollCursor(0);
-    this.setCursor(0);
+    this.silentScroll = true;
+    this.scrollBar.setScrollCursor(0);
+    this.silentScroll = false;
+    this.cursor = 0;
   }
 
+  /**
+   * Update the cursor position and notify via callback
+   * @param cursor the new cursor position
+   * @returns whether the cursor actually changed
+   */
   private setCursor(cursor: number): boolean {
+    if (cursor === this.cursor) {
+      return false;
+    }
     this.cursor = cursor;
-    return this.handler.setCursor(cursor);
+    if (this.cursorUpdateCallback) {
+      this.cursorUpdateCallback(cursor);
+    }
+    return true;
   }
 
   private setScrollCursor(scrollCursor: number, cursor?: number): boolean {
-    const scrollChanged = scrollCursor !== this.scrollCursor;
+    let changed = false;
 
-    // update the scrolling cursor
-    if (scrollChanged) {
-      this.scrollCursor = scrollCursor;
-      if (this.scrollBar) {
-        this.scrollBar.setScrollCursor(scrollCursor);
-      }
-      if (this.updateGridCallback) {
-        this.updateGridCallback();
-      }
-    }
+    this.scrollBar.setScrollCursor(scrollCursor);
+    changed = true;
 
-    let cursorChanged = false;
-    const newElementIndex = this.cursor + this.scrollCursor * this.COLUMNS;
     if (cursor !== undefined) {
-      cursorChanged = this.setCursor(cursor);
-    } else if (newElementIndex >= this.totalElements) {
-      // make sure the cursor does not go past the end of the list
-      cursorChanged = this.setCursor(this.totalElements - this.scrollCursor * this.COLUMNS - 1);
-    } else if (scrollChanged && this.updateDetailsCallback) {
-      // scroll was changed but not the normal cursor, update the selected element
-      this.updateDetailsCallback(newElementIndex);
+      changed = this.setCursor(cursor) || changed;
+    } else {
+      const itemOffset = scrollCursor * this.COLUMNS;
+      const maxCursor = Math.min(this.cursor, this.totalElements - itemOffset - 1);
+      if (maxCursor !== this.cursor) {
+        changed = this.setCursor(maxCursor) || changed;
+      }
     }
 
-    return scrollChanged || cursorChanged;
+    return changed;
   }
 }
