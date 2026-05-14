@@ -259,7 +259,7 @@ export class DropDown extends Phaser.GameObjects.Container {
   private onChange: () => void;
   private lastDir: SortDirection = SortDirection.ASC;
   private defaultSettings: any[];
-  private readonly scrollBar: ScrollBar;
+  private readonly scrollBar: ScrollBar | undefined;
   private totalOptions = 0;
   private maxOptions = 0;
   private shownOptions = 0;
@@ -429,7 +429,7 @@ export class DropDown extends Phaser.GameObjects.Container {
   }
 
   public incCursor(): void {
-    if (this.cursor - this.shownOptions + 1 === this.scrollBar.getCurrentRow()) {
+    if (this.cursor - this.shownOptions + 1 === this.scrollBar?.getCurrentRow()) {
       this.scrollBar.scrollDown();
       return;
     }
@@ -437,7 +437,7 @@ export class DropDown extends Phaser.GameObjects.Container {
   }
 
   public decCursor(): void {
-    if (this.cursor === this.scrollBar.getCurrentRow()) {
+    if (this.cursor === this.scrollBar?.getCurrentRow()) {
       this.scrollBar.scrollUp();
       return;
     }
@@ -482,7 +482,7 @@ export class DropDown extends Phaser.GameObjects.Container {
   }
 
   setLabels() {
-    const firstShown = this.scrollBar.getCurrentRow();
+    const firstShown = this.scrollBar?.getCurrentRow() ?? 0;
     this.options.forEach((option, index) => {
       if (index < firstShown || index >= firstShown + this.shownOptions) {
         this.optionButtons.hide(option);
