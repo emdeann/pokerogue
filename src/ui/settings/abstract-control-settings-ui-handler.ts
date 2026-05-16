@@ -277,7 +277,6 @@ export abstract class AbstractControlSettingsUiHandler extends AbstractGridSetti
     if (row.kind !== "binding" || row.locked) {
       return false;
     }
-    this.settingsGrid?.setTouchEnabled(false);
     return this.setSetting(row.settingName, 1);
   }
 

@@ -205,6 +205,7 @@ export class UI extends Phaser.GameObjects.Container {
     this.savingIcon.setup();
 
     globalScene.uiContainer.add(this.savingIcon);
+    this.getHandler().setInputEnabled(true);
   }
 
   private setupTooltip() {
@@ -536,21 +537,24 @@ export class UI extends Phaser.GameObjects.Container {
         return;
       }
       const doSetMode = () => {
-        if (this.mode !== mode) {
-          if (clear) {
-            this.getHandler().clear();
-          }
-          if (chainMode && this.mode && !clear) {
-            this.modeChain.push(this.mode);
-            globalScene.updateGameInfo();
-          }
-          this.mode = mode;
-          const touchControls = document?.getElementById("touchControls");
-          if (touchControls) {
-            touchControls.dataset.uiMode = UiMode[mode];
-          }
-          this.getHandler().show(args);
+        if (this.mode === mode) {
+          resolve();
         }
+        this.getHandler().setInputEnabled(false);
+        if (clear) {
+          this.getHandler().clear();
+        }
+        if (chainMode && this.mode && !clear) {
+          this.modeChain.push(this.mode);
+          globalScene.updateGameInfo();
+        }
+        this.mode = mode;
+        const touchControls = document?.getElementById("touchControls");
+        if (touchControls) {
+          touchControls.dataset.uiMode = UiMode[mode];
+        }
+        this.getHandler().show(args);
+        this.getHandler().setInputEnabled(true);
         resolve();
       };
       if (
@@ -606,6 +610,7 @@ export class UI extends Phaser.GameObjects.Container {
       const lastMode = this.mode;
 
       const doRevertMode = () => {
+        this.getHandler().setInputEnabled(false);
         this.getHandler().clear();
         this.mode = this.modeChain.pop()!; // TODO: is this bang correct?
         globalScene.updateGameInfo();
@@ -613,6 +618,7 @@ export class UI extends Phaser.GameObjects.Container {
         if (touchControls) {
           touchControls.dataset.uiMode = UiMode[this.mode];
         }
+        this.getHandler().setInputEnabled(true);
         resolve(true);
       };
 
@@ -628,7 +634,6 @@ export class UI extends Phaser.GameObjects.Container {
       }
     });
   }
-
   revertModes(): Promise<void> {
     return new Promise<void>(resolve => {
       if (this?.modeChain?.length === 0) {

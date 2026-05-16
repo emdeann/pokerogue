@@ -90,7 +90,9 @@ export abstract class AbstractOptionSelectUiHandler extends UiHandler {
     if (this.config.delay) {
       this.blockInput = true;
       this.listHelper!.setAlpha(0.5);
-      this.listHelper!.setTouchEnabled(false);
+      // Local mute; the manager will fire setInputEnabled(true) right after
+      // show() returns, and applyInputState composes the two signals.
+      this.applyInputState();
       globalScene.time.delayedCall(fixedInt(this.config.delay), () => this.unblockInput());
     }
 
@@ -266,7 +268,7 @@ export abstract class AbstractOptionSelectUiHandler extends UiHandler {
     }
     this.blockInput = false;
     this.listHelper?.setAlpha(1);
-    this.listHelper?.setTouchEnabled(true);
+    this.applyInputState();
   }
 
   clear() {
@@ -275,5 +277,14 @@ export abstract class AbstractOptionSelectUiHandler extends UiHandler {
     this.visibleOptions = [];
     this.optionSelectContainer.setVisible(false);
     this.listHelper?.reset();
+  }
+
+  /**
+   * Composes manager-driven ownership with the local `delay`-window mute. The
+   * grid receives pointer input only when this handler both owns input and is
+   * not currently muted.
+   */
+  protected override applyInputState(): void {
+    this.listHelper?.setTouchEnabled(this.hasInputOwnership() && !this.blockInput);
   }
 }

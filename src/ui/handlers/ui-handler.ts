@@ -10,6 +10,9 @@ export abstract class UiHandler {
   protected cursor = 0;
   public active = false;
 
+  /** True iff the UI manager currently considers this handler the input owner. */
+  private inputOwned = false;
+
   /**
    * @param mode The mode of the UI element. These should be unique.
    */
@@ -45,6 +48,24 @@ export abstract class UiHandler {
   }
 
   /**
+   * Called by the UI to determine when this handler is allowed to receive touch inputs.
+   */
+  setInputEnabled(enabled: boolean): void {
+    this.inputOwned = enabled;
+    this.applyInputState();
+  }
+
+  /** Whether the UI manager currently considers this handler the input owner. */
+  protected hasInputOwnership(): boolean {
+    return this.inputOwned;
+  }
+
+  /**
+   * Subclasses may override this to apply additional conditions to touch input allowance.
+   */
+  protected applyInputState(): void {}
+
+  /**
    * Changes the style of the mouse cursor.
    * @see {@link https://developer.mozilla.org/en-US/docs/Web/CSS/cursor}
    * @param cursorStyle cursor style to apply
@@ -56,6 +77,7 @@ export abstract class UiHandler {
   clear() {
     this.active = false;
   }
+
   /**
    * To be implemented by individual handlers when necessary to free memory
    * Called when {@linkcode BattleScene} is reset

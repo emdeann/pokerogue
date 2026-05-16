@@ -208,7 +208,6 @@ export abstract class AbstractGridSettingsUiHandler<
     this.currentRowIndex = 0;
 
     this.refreshRows();
-    this.settingsGrid?.setTouchEnabled(true);
 
     this.onShow();
 
@@ -235,8 +234,6 @@ export abstract class AbstractGridSettingsUiHandler<
   processInput(button: Button): boolean {
     const ui = this.getUi();
     let success = false;
-    // touch suppression can be lifted if we're getting kb input
-    this.settingsGrid?.setTouchEnabled(true);
 
     if (button === Button.CANCEL) {
       success = true;
@@ -321,5 +318,10 @@ export abstract class AbstractGridSettingsUiHandler<
   ) {
     this.messageBoxContainer.setVisible(text?.length > 0);
     super.showText(text, delay, callback, callbackDelay, prompt, promptDelay);
+  }
+
+  /** Settings handlers have no handler-local mute; ownership alone gates touch. */
+  protected override applyInputState(): void {
+    this.settingsGrid?.setTouchEnabled(this.hasInputOwnership());
   }
 }
