@@ -12,6 +12,7 @@ import type { OptionSelectConfig, OptionSelectItem } from "#ui/abstract-option-s
 import type { AwaitableUiHandler } from "#ui/awaitable-ui-handler";
 import { BgmBar } from "#ui/bgm-bar";
 import { MessageUiHandler } from "#ui/message-ui-handler";
+import { ScrollableListHelper } from "#ui/scrollable-list-helper";
 import { addTextObject, getTextStyleOptions } from "#ui/text";
 import { addWindow, WindowVariant } from "#ui/ui-theme";
 import { fixedInt, sessionIdKey } from "#utils/common";
@@ -49,9 +50,9 @@ export class MenuUiHandler extends MessageUiHandler {
   private menuOverlay: Phaser.GameObjects.Rectangle;
 
   private menuBg: Phaser.GameObjects.NineSlice;
-  protected optionSelectText: Phaser.GameObjects.Text;
 
-  private cursorObj: Phaser.GameObjects.Image | null;
+  private listHelper: ScrollableListHelper<OptionSelectItem> | null = null;
+  private menuItems: OptionSelectItem[] = [];
 
   private excludedMenus: () => ConditionalMenu[];
   private menuOptions: MenuOptions[];
@@ -136,29 +137,56 @@ export class MenuUiHandler extends MessageUiHandler {
       return !this.excludedMenus().some(exclusion => exclusion.condition && exclusion.options.includes(m));
     });
 
-    this.optionSelectText = addTextObject(
-      0,
-      0,
-      this.menuOptions.map(o => `${i18next.t(`menuUiHandler:${toCamelCase(MenuOptions[o])}`)}`).join("\n"),
-      TextStyle.WINDOW,
-      { maxLines: this.menuOptions.length },
-    );
-    this.optionSelectText.setLineSpacing(12);
-
     this.scale = getTextStyleOptions(TextStyle.WINDOW).scale;
+
+    this.menuItems = this.buildMenuItems();
+
+    const measure = addTextObject(0, 0, this.menuItems.map(i => i.label).join("\n"), TextStyle.WINDOW, {
+      maxLines: this.menuItems.length,
+    });
+    measure.setLineSpacing(12);
+    const labelWidth = measure.displayWidth;
+    measure.destroy();
+
     this.menuBg = addWindow(
-      globalScene.scaledCanvas.width - (this.optionSelectText.displayWidth + 25),
+      globalScene.scaledCanvas.width - (labelWidth + 25),
       0,
-      this.optionSelectText.displayWidth + 19 + 24 * this.scale,
+      labelWidth + 19 + 24 * this.scale,
       globalScene.scaledCanvas.height - 2,
     );
     this.menuBg.setOrigin(0, 0);
-
-    this.optionSelectText.setPositionRelative(this.menuBg, 10 + 24 * this.scale, 6);
-
     this.menuContainer.add(this.menuBg);
 
-    this.menuContainer.add(this.optionSelectText);
+    if (this.listHelper) {
+      this.listHelper.destroy();
+      this.listHelper = null;
+    }
+    this.listHelper = new ScrollableListHelper<OptionSelectItem>(0, 0, {
+      rows: this.menuItems.length,
+      items: {
+        x: this.menuBg.x + 10 + 24 * this.scale,
+        y: this.menuBg.y + 6,
+        rowSpacing: 96 * this.scale,
+        width: this.menuBg.width - 20 - 24 * this.scale,
+      },
+      scrollMode: "arrows",
+      arrowStyle: TextStyle.WINDOW,
+      cursor: {
+        texture: "cursor",
+        width: 6,
+        height: 10,
+        offsetX: -3 - 24 * this.scale,
+        offsetY: 18 * this.scale,
+      },
+      textOptions: { maxLines: 1 },
+      getLabel: item => item.label,
+      onItemSelected: item => {
+        this.cursor = this.menuItems.indexOf(item);
+      },
+      onItemActioned: item => this.runMenuItem(item),
+    });
+    this.menuContainer.add(this.listHelper);
+    this.listHelper.setItems(this.menuItems);
 
     ui.add(this.menuContainer);
 
@@ -514,7 +542,187 @@ export class MenuUiHandler extends MessageUiHandler {
       xOffset: 98,
       options: communityOptions,
     };
-    this.setCursor(0);
+  }
+
+  /** Build the top-level menu options as {@linkcode OptionSelectItem}s for the list helper. */
+  private buildMenuItems(): OptionSelectItem[] {
+    const ui = this.getUi();
+
+    const handlers: Record<MenuOptions, () => boolean> = {
+      [MenuOptions.GAME_SETTINGS]: () => {
+        ui.setOverlayMode(UiMode.SETTINGS);
+        return true;
+      },
+      [MenuOptions.ACHIEVEMENTS]: () => {
+        ui.setOverlayMode(UiMode.ACHIEVEMENTS);
+        return true;
+      },
+      [MenuOptions.STATS]: () => {
+        ui.setOverlayMode(UiMode.GAME_STATS);
+        return true;
+      },
+      [MenuOptions.EGG_LIST]: () => {
+        if (globalScene.gameData.eggs.length > 0) {
+          ui.revertMode();
+          ui.setOverlayMode(UiMode.EGG_LIST);
+          return true;
+        }
+        ui.showText(i18next.t("menuUiHandler:noEggs"), null, () => ui.showText(""), fixedInt(1500));
+        return false;
+      },
+      [MenuOptions.EGG_GACHA]: () => {
+        ui.revertMode();
+        ui.setOverlayMode(UiMode.EGG_GACHA);
+        return true;
+      },
+      [MenuOptions.POKEDEX]: () => {
+        ui.revertMode();
+        ui.setOverlayMode(UiMode.POKEDEX);
+        return true;
+      },
+      [MenuOptions.MANAGE_DATA]: () => {
+        if (
+          !bypassLogin
+          && !this.manageDataConfig.options.some(
+            o =>
+              o.label === i18next.t("menuUiHandler:linkDiscord")
+              || o.label === i18next.t("menuUiHandler:unlinkDiscord"),
+          )
+        ) {
+          this.manageDataConfig.options.splice(
+            this.manageDataConfig.options.length - 1,
+            0,
+            {
+              label:
+                loggedInUser?.discordId === ""
+                  ? i18next.t("menuUiHandler:linkDiscord")
+                  : i18next.t("menuUiHandler:unlinkDiscord"),
+              handler: () => {
+                if (loggedInUser?.discordId === "") {
+                  const token = getCookie(sessionIdKey);
+                  const redirectUri = encodeURIComponent(`${import.meta.env.VITE_SERVER_URL}/auth/discord/callback`);
+                  const discordId = import.meta.env.VITE_DISCORD_CLIENT_ID;
+                  const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${discordId}&redirect_uri=${redirectUri}&response_type=code&scope=identify&state=${token}&prompt=none`;
+                  window.open(discordUrl, "_self");
+                  return true;
+                }
+                pokerogueApi.unlinkDiscord().then(_isSuccess => {
+                  updateUserInfo().then(() => globalScene.reset(true, true));
+                });
+                return true;
+              },
+            },
+            {
+              label:
+                loggedInUser?.googleId === ""
+                  ? i18next.t("menuUiHandler:linkGoogle")
+                  : i18next.t("menuUiHandler:unlinkGoogle"),
+              handler: () => {
+                if (loggedInUser?.googleId === "") {
+                  const token = getCookie(sessionIdKey);
+                  const redirectUri = encodeURIComponent(`${import.meta.env.VITE_SERVER_URL}/auth/google/callback`);
+                  const googleId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+                  const googleUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${googleId}&response_type=code&redirect_uri=${redirectUri}&scope=openid&state=${token}`;
+                  window.open(googleUrl, "_self");
+                  return true;
+                }
+                pokerogueApi.unlinkGoogle().then(_isSuccess => {
+                  updateUserInfo().then(() => globalScene.reset(true, true));
+                });
+                return true;
+              },
+            },
+          );
+        }
+        ui.setOverlayMode(UiMode.MENU_OPTION_SELECT, this.manageDataConfig);
+        return true;
+      },
+      [MenuOptions.COMMUNITY]: () => {
+        ui.setOverlayMode(UiMode.MENU_OPTION_SELECT, this.communityConfig);
+        return true;
+      },
+      [MenuOptions.SAVE_AND_QUIT]: () => {
+        const doSaveQuit = () => {
+          ui.setMode(UiMode.LOADING, {
+            buttonActions: [],
+            fadeOut: () =>
+              globalScene.gameData.saveAll(true, true, true, true).then(() => {
+                globalScene.reset(true);
+              }),
+          });
+        };
+        if (globalScene.currentBattle.turn > 1) {
+          ui.showText(i18next.t("menuUiHandler:losingProgressionWarning"), null, () => {
+            if (!this.active) {
+              this.showText("", 0);
+              return;
+            }
+            ui.setOverlayMode(
+              UiMode.CONFIRM,
+              doSaveQuit,
+              () => {
+                ui.revertMode();
+                this.showText("", 0);
+              },
+              false,
+              -98,
+            );
+          });
+        } else {
+          doSaveQuit();
+        }
+        return true;
+      },
+      [MenuOptions.LOG_OUT]: () => {
+        const doLogout = () => {
+          ui.setMode(UiMode.LOADING, {
+            buttonActions: [],
+            fadeOut: () =>
+              pokerogueApi.account.logout().then(() => {
+                updateUserInfo().then(() => globalScene.reset(true, true));
+              }),
+          });
+        };
+        if (globalScene.currentBattle) {
+          ui.showText(i18next.t("menuUiHandler:losingProgressionWarning"), null, () => {
+            if (!this.active) {
+              this.showText("", 0);
+              return;
+            }
+            ui.setOverlayMode(
+              UiMode.CONFIRM,
+              doLogout,
+              () => {
+                ui.revertMode();
+                this.showText("", 0);
+              },
+              false,
+              -98,
+            );
+          });
+        } else {
+          doLogout();
+        }
+        return true;
+      },
+    };
+
+    return this.menuOptions.map(m => ({
+      label: i18next.t(`menuUiHandler:${toCamelCase(MenuOptions[m])}`),
+      handler: handlers[m],
+      keepOpen: true,
+    }));
+  }
+
+  /** Execute a menu item's handler, clearing any lingering message and playing the appropriate sound. */
+  private runMenuItem(item: OptionSelectItem): void {
+    const ui = this.getUi();
+    this.showText("", 0);
+    if (item.handler()) {
+      ui.playSelect();
+    } else {
+      ui.playError();
+    }
   }
 
   show(args: any[]): boolean {
@@ -526,7 +734,6 @@ export class MenuUiHandler extends MessageUiHandler {
     });
 
     this.menuContainer.setVisible(true);
-    this.setCursor(0);
 
     this.getUi().moveTo(this.menuContainer, this.getUi().length - 1);
 
@@ -547,217 +754,29 @@ export class MenuUiHandler extends MessageUiHandler {
   processInput(button: Button): boolean {
     const ui = this.getUi();
 
-    let success = false;
-    let error = false;
-
-    if (button === Button.ACTION) {
-      let adjustedCursor = this.cursor;
-      const excludedMenu = this.excludedMenus().find(e => e.condition);
-      if (excludedMenu !== undefined && excludedMenu.options !== undefined && excludedMenu.options.length > 0) {
-        const sortedOptions = excludedMenu.options.sort();
-        for (const imo of sortedOptions) {
-          if (adjustedCursor >= imo) {
-            adjustedCursor++;
-          } else {
-            break;
-          }
-        }
-      }
-      this.showText("", 0);
-      switch (adjustedCursor) {
-        case MenuOptions.GAME_SETTINGS:
-          ui.setOverlayMode(UiMode.SETTINGS);
-          success = true;
-          break;
-        case MenuOptions.ACHIEVEMENTS:
-          ui.setOverlayMode(UiMode.ACHIEVEMENTS);
-          success = true;
-          break;
-        case MenuOptions.STATS:
-          ui.setOverlayMode(UiMode.GAME_STATS);
-          success = true;
-          break;
-        case MenuOptions.EGG_LIST:
-          if (globalScene.gameData.eggs.length > 0) {
-            ui.revertMode();
-            ui.setOverlayMode(UiMode.EGG_LIST);
-            success = true;
-          } else {
-            ui.showText(i18next.t("menuUiHandler:noEggs"), null, () => ui.showText(""), fixedInt(1500));
-            error = true;
-          }
-          break;
-        case MenuOptions.EGG_GACHA:
-          ui.revertMode();
-          ui.setOverlayMode(UiMode.EGG_GACHA);
-          success = true;
-          break;
-        case MenuOptions.POKEDEX:
-          ui.revertMode();
-          ui.setOverlayMode(UiMode.POKEDEX);
-          success = true;
-          break;
-        case MenuOptions.MANAGE_DATA:
-          if (
-            !bypassLogin
-            && !this.manageDataConfig.options.some(
-              o =>
-                o.label === i18next.t("menuUiHandler:linkDiscord")
-                || o.label === i18next.t("menuUiHandler:unlinkDiscord"),
-            )
-          ) {
-            this.manageDataConfig.options.splice(
-              this.manageDataConfig.options.length - 1,
-              0,
-              {
-                label:
-                  loggedInUser?.discordId === ""
-                    ? i18next.t("menuUiHandler:linkDiscord")
-                    : i18next.t("menuUiHandler:unlinkDiscord"),
-                handler: () => {
-                  if (loggedInUser?.discordId === "") {
-                    const token = getCookie(sessionIdKey);
-                    const redirectUri = encodeURIComponent(`${import.meta.env.VITE_SERVER_URL}/auth/discord/callback`);
-                    const discordId = import.meta.env.VITE_DISCORD_CLIENT_ID;
-                    const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${discordId}&redirect_uri=${redirectUri}&response_type=code&scope=identify&state=${token}&prompt=none`;
-                    window.open(discordUrl, "_self");
-                    return true;
-                  }
-                  pokerogueApi.unlinkDiscord().then(_isSuccess => {
-                    updateUserInfo().then(() => globalScene.reset(true, true));
-                  });
-                  return true;
-                },
-              },
-              {
-                label:
-                  loggedInUser?.googleId === ""
-                    ? i18next.t("menuUiHandler:linkGoogle")
-                    : i18next.t("menuUiHandler:unlinkGoogle"),
-                handler: () => {
-                  if (loggedInUser?.googleId === "") {
-                    const token = getCookie(sessionIdKey);
-                    const redirectUri = encodeURIComponent(`${import.meta.env.VITE_SERVER_URL}/auth/google/callback`);
-                    const googleId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-                    const googleUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${googleId}&response_type=code&redirect_uri=${redirectUri}&scope=openid&state=${token}`;
-                    window.open(googleUrl, "_self");
-                    return true;
-                  }
-                  pokerogueApi.unlinkGoogle().then(_isSuccess => {
-                    updateUserInfo().then(() => globalScene.reset(true, true));
-                  });
-                  return true;
-                },
-              },
-            );
-          }
-          ui.setOverlayMode(UiMode.MENU_OPTION_SELECT, this.manageDataConfig);
-          success = true;
-          break;
-        case MenuOptions.COMMUNITY:
-          ui.setOverlayMode(UiMode.MENU_OPTION_SELECT, this.communityConfig);
-          success = true;
-          break;
-        case MenuOptions.SAVE_AND_QUIT: {
-          success = true;
-          const doSaveQuit = () => {
-            ui.setMode(UiMode.LOADING, {
-              buttonActions: [],
-              fadeOut: () =>
-                globalScene.gameData.saveAll(true, true, true, true).then(() => {
-                  globalScene.reset(true);
-                }),
-            });
-          };
-          if (globalScene.currentBattle.turn > 1) {
-            ui.showText(i18next.t("menuUiHandler:losingProgressionWarning"), null, () => {
-              if (!this.active) {
-                this.showText("", 0);
-                return;
-              }
-              ui.setOverlayMode(
-                UiMode.CONFIRM,
-                doSaveQuit,
-                () => {
-                  ui.revertMode();
-                  this.showText("", 0);
-                },
-                false,
-                -98,
-              );
-            });
-          } else {
-            doSaveQuit();
-          }
-          break;
-        }
-        case MenuOptions.LOG_OUT: {
-          success = true;
-          const doLogout = () => {
-            ui.setMode(UiMode.LOADING, {
-              buttonActions: [],
-              fadeOut: () =>
-                pokerogueApi.account.logout().then(() => {
-                  updateUserInfo().then(() => globalScene.reset(true, true));
-                }),
-            });
-          };
-          if (globalScene.currentBattle) {
-            ui.showText(i18next.t("menuUiHandler:losingProgressionWarning"), null, () => {
-              if (!this.active) {
-                this.showText("", 0);
-                return;
-              }
-              ui.setOverlayMode(
-                UiMode.CONFIRM,
-                doLogout,
-                () => {
-                  ui.revertMode();
-                  this.showText("", 0);
-                },
-                false,
-                -98,
-              );
-            });
-          } else {
-            doLogout();
-          }
-          break;
-        }
-      }
-    } else if (button === Button.CANCEL) {
-      success = true;
+    if (button === Button.CANCEL) {
       ui.revertMode().then(result => {
         if (!result) {
           ui.setMode(UiMode.MESSAGE);
         }
       });
-    } else {
-      switch (button) {
-        case Button.UP:
-          if (this.cursor) {
-            success = this.setCursor(this.cursor - 1);
-          } else {
-            success = this.setCursor(this.menuOptions.length - 1);
-          }
-          break;
-        case Button.DOWN:
-          if (this.cursor + 1 < this.menuOptions.length) {
-            success = this.setCursor(this.cursor + 1);
-          } else {
-            success = this.setCursor(0);
-          }
-          break;
-      }
-    }
-
-    if (success) {
       ui.playSelect();
-    } else if (error) {
-      ui.playError();
+      return true;
     }
 
-    return success || error;
+    if (button === Button.ACTION) {
+      return this.listHelper?.processInput(button) ?? false;
+    }
+
+    if (button === Button.UP || button === Button.DOWN) {
+      const success = this.listHelper?.processInput(button) ?? false;
+      if (success) {
+        ui.playSelect();
+      }
+      return success;
+    }
+
+    return false;
   }
 
   /**
@@ -790,33 +809,15 @@ export class MenuUiHandler extends MessageUiHandler {
     super.showText(text, delay, callback, callbackDelay, prompt, promptDelay);
   }
 
-  setCursor(cursor: number): boolean {
-    const ret = super.setCursor(cursor);
-
-    if (!this.cursorObj) {
-      this.cursorObj = globalScene.add.image(0, 0, "cursor");
-      this.cursorObj.setOrigin(0, 0);
-      this.menuContainer.add(this.cursorObj);
-    }
-
-    this.cursorObj.setScale(this.scale * 6);
-    this.cursorObj.setPositionRelative(this.menuBg, 7, 6 + (18 + this.cursor * 96) * this.scale);
-
-    return ret;
-  }
-
   clear() {
     super.clear();
     this.menuContainer.setVisible(false);
     this.bgmBar.toggleBgmBar(false);
-    this.eraseCursor();
+    this.listHelper?.reset();
   }
 
-  eraseCursor() {
-    if (this.cursorObj) {
-      this.cursorObj.destroy();
-    }
-    this.cursorObj = null;
+  protected override applyInputState(): void {
+    this.listHelper?.setTouchEnabled(this.hasInputOwnership());
   }
 }
 
