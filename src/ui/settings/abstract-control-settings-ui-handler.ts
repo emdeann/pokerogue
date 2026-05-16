@@ -49,7 +49,8 @@ export abstract class AbstractControlSettingsUiHandler extends AbstractGridSetti
   protected settingDeviceDefaults: Record<string, number>;
   protected settingDeviceOptions: Record<string, string[]>;
   protected settingBlacklisted: string[];
-  protected configs: CustomInterfaceConfig[];
+  // todo type this properly
+  protected configs;
   protected commonSettingsCount = 0;
   protected textureOverride: string | null = null;
   protected localStoragePropertyName: string;
