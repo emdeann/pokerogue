@@ -229,7 +229,7 @@ export class InputsController {
       this.selectedDevice[Device.KEYBOARD] = layoutKeyboard.toLowerCase();
     }
     const handler = globalScene.ui?.handlers[UiMode.SETTINGS_KEYBOARD] as SettingsKeyboardUiHandler;
-    handler?.updateChosenKeyboardDisplay();
+    handler?.updateBindings();
   }
 
   /**
