@@ -2,13 +2,12 @@ import { globalScene } from "#app/global-scene";
 import { Button } from "#enums/buttons";
 import { TextStyle } from "#enums/text-style";
 import { UiMode } from "#enums/ui-mode";
+import { ScrollableListHelper } from "#ui/scrollable-list-helper";
 import { addBBCodeTextObject, getTextColor, getTextStyleOptions } from "#ui/text";
 import { UiHandler } from "#ui/ui-handler";
 import { addWindow } from "#ui/ui-theme";
 import { fixedInt, rgbHexToRgba } from "#utils/common";
 import { argbFromRgba } from "@material/material-color-utilities";
-import Buttons from "phaser3-rex-plugins/templates/ui/buttons/Buttons";
-import Label from "phaser3-rex-plugins/templates/ui/label/Label";
 
 export interface OptionSelectConfig {
   xOffset?: number;
@@ -32,36 +31,25 @@ export interface OptionSelectItem {
   itemArgs?: any[];
 }
 
-const scrollUpLabel = "↑";
-const scrollDownLabel = "↓";
-
 export abstract class AbstractOptionSelectUiHandler extends UiHandler {
   protected optionSelectContainer: Phaser.GameObjects.Container;
-  protected optionSelectTextContainer: Phaser.GameObjects.Container;
   protected optionSelectBg: Phaser.GameObjects.NineSlice;
-  protected optionSelectButtons: Buttons;
-  protected optionSelectIcons: Phaser.GameObjects.Sprite[];
 
-  protected config: OptionSelectConfig | null;
+  protected listHelper: ScrollableListHelper<OptionSelectItem> | null = null;
 
-  protected blockInput: boolean;
-
-  protected scrollCursor = 0;
-  protected fullCursor = 0;
+  protected config: OptionSelectConfig | null = null;
+  protected blockInput = false;
 
   protected scale = 0.1666666667;
-
-  private cursorObj: Phaser.GameObjects.Image | null;
-
-  protected unskippedIndices: number[] = [];
-
   protected defaultTextStyle: TextStyle = TextStyle.WINDOW;
-  protected textContent: string;
+
+  /** Selectable options derived from config.options (skipped items filtered out). */
+  protected visibleOptions: OptionSelectItem[] = [];
 
   abstract getWindowWidth(): number;
 
   getWindowHeight(): number {
-    return (Math.min((this.config?.options || []).length, this.config?.maxOptions || 99) + 1) * 96 * this.scale;
+    return (Math.min((this.config?.options ?? []).length, this.config?.maxOptions || 99) + 1) * 96 * this.scale;
   }
 
   setup() {
@@ -77,404 +65,215 @@ export abstract class AbstractOptionSelectUiHandler extends UiHandler {
     this.optionSelectBg.setOrigin(1, 1);
     this.optionSelectContainer.add(this.optionSelectBg);
 
-    this.optionSelectTextContainer = globalScene.add.container(0, 0);
-    this.optionSelectContainer.add(this.optionSelectTextContainer);
-
-    this.optionSelectIcons = [];
-
     this.scale = getTextStyleOptions(TextStyle.WINDOW).scale;
-
-    this.setCursor(0);
-  }
-
-  protected setupOptions() {
-    const configOptions = this.config?.options ?? [];
-
-    const options: OptionSelectItem[] = configOptions;
-
-    this.unskippedIndices = this.getUnskippedIndices(configOptions);
-
-    if (this.optionSelectButtons) {
-      this.optionSelectButtons.destroy();
-    }
-
-    if (this.optionSelectIcons?.length > 0) {
-      this.optionSelectIcons.map(i => i.destroy());
-      this.optionSelectIcons.splice(0, this.optionSelectIcons.length);
-    }
-
-    const optionsWithScroll =
-      this.config?.options && this.config?.options.length > (this.config?.maxOptions ?? Number.POSITIVE_INFINITY)
-        ? this.getOptionsWithScroll()
-        : options;
-
-    const visibleLabels = optionsWithScroll.map(o => {
-      const textStr = o.item
-        ? `[shadow=${getTextColor(o.style ?? this.defaultTextStyle, true)}][color=${getTextColor(o.style ?? TextStyle.WINDOW, false)}]    ${o.label}[/color][/shadow]`
-        : `[shadow=${getTextColor(o.style ?? this.defaultTextStyle, true)}][color=${getTextColor(o.style ?? TextStyle.WINDOW, false)}]${o.label}[/color][/shadow]`;
-
-      const textObj = addBBCodeTextObject(0, 0, textStr, TextStyle.WINDOW, { maxLines: 1 });
-
-      const label = new Label(globalScene, {
-        text: textObj,
-      });
-      globalScene.add.existing(label);
-      return label;
-    });
-
-    this.optionSelectButtons = new Buttons(globalScene, {
-      orientation: "y",
-      space: { item: 1 },
-      buttons: visibleLabels,
-      click: {
-        mode: "press",
-        clickInterval: 100,
-      },
-    });
-    globalScene.add.existing(this.optionSelectButtons);
-    this.setButtonHandlers(optionsWithScroll);
-
-    this.optionSelectButtons.setOrigin(0, 0);
-    this.optionSelectButtons.setName("text-option-select");
-    this.optionSelectButtons.layout();
-
-    this.optionSelectTextContainer.add(this.optionSelectButtons);
-
-    this.optionSelectContainer.setPosition(
-      globalScene.scaledCanvas.width - 1 - (this.config?.xOffset || 0),
-      -48 + (this.config?.yOffset || 0),
-    );
-
-    const optionsForWidth = globalScene.ui.getMode() === UiMode.AUTO_COMPLETE ? optionsWithScroll : options;
-    const widthMeasureText = addBBCodeTextObject(
-      0,
-      0,
-      optionsForWidth
-        .map(o =>
-          o.item
-            ? `[shadow=${getTextColor(o.style ?? this.defaultTextStyle, true)}][color=${getTextColor(o.style ?? TextStyle.WINDOW, false)}]    ${o.label}[/color][/shadow]`
-            : `[shadow=${getTextColor(o.style ?? this.defaultTextStyle, true)}][color=${getTextColor(o.style ?? TextStyle.WINDOW, false)}]${o.label}[/color][/shadow]`,
-        )
-        .join("\n"),
-      TextStyle.WINDOW,
-      { maxLines: optionsForWidth.length, lineSpacing: 12 },
-    );
-    const measuredTextWidth = widthMeasureText.displayWidth;
-    widthMeasureText.destroy();
-
-    this.optionSelectBg.width = Math.max(measuredTextWidth + 24, this.getWindowWidth());
-    this.optionSelectBg.height = this.getWindowHeight();
-    this.optionSelectTextContainer.setPosition(
-      this.optionSelectBg.x - this.optionSelectBg.width + 12 + 24 * this.scale,
-      this.optionSelectBg.y - this.optionSelectBg.height + 2 + 42 * this.scale,
-    );
-
-    this.textContent = optionsWithScroll
-      .map(o =>
-        o.item
-          ? `[shadow=${getTextColor(o.style ?? this.defaultTextStyle, true)}][color=${getTextColor(o.style ?? TextStyle.WINDOW, false)}]    ${o.label}[/color][/shadow]`
-          : `[shadow=${getTextColor(o.style ?? this.defaultTextStyle, true)}][color=${getTextColor(o.style ?? TextStyle.WINDOW, false)}]${o.label}[/color][/shadow]`,
-      )
-      .join("\n");
-
-    options.forEach((option: OptionSelectItem, i: number) => {
-      if (option.item) {
-        const itemIcon = globalScene.add.sprite(0, 0, "items", option.item);
-        itemIcon.setScale(3 * this.scale);
-        this.optionSelectIcons.push(itemIcon);
-
-        this.optionSelectTextContainer.add(itemIcon);
-
-        itemIcon.setPositionRelative(this.optionSelectButtons, 36 * this.scale, 7 + i * (114 * this.scale - 3));
-
-        if (option.item === "candy") {
-          const itemOverlayIcon = globalScene.add.sprite(0, 0, "items", "candy_overlay");
-          itemOverlayIcon.setScale(3 * this.scale);
-          this.optionSelectIcons.push(itemOverlayIcon);
-
-          this.optionSelectTextContainer.add(itemOverlayIcon);
-
-          itemOverlayIcon.setPositionRelative(
-            this.optionSelectButtons,
-            36 * this.scale,
-            7 + i * (114 * this.scale - 3),
-          );
-
-          if (option.itemArgs) {
-            itemIcon.setTint(argbFromRgba(rgbHexToRgba(option.itemArgs[0])));
-            itemOverlayIcon.setTint(argbFromRgba(rgbHexToRgba(option.itemArgs[1])));
-          }
-        }
-      }
-    });
-  }
-
-  private setButtonHandlers(options: readonly OptionSelectItem[]): void {
-    this.optionSelectButtons.on("button.over", (button: Label) => {
-      if (this.blockInput) {
-        return;
-      }
-
-      const buttonIndex = this.optionSelectButtons.buttons.indexOf(button);
-      const unskippedIndex = this.unskippedIndices.findIndex(
-        idx => idx === buttonIndex + (this.scrollCursor > 0 ? this.scrollCursor - 1 : 0),
-      );
-
-      if (unskippedIndex !== -1) {
-        this.setCursor(unskippedIndex);
-      }
-
-      const option = options[buttonIndex];
-      if (this.config?.supportHover && option?.onHover) {
-        option.onHover();
-      }
-    });
-
-    this.optionSelectButtons.on("button.click", () => {
-      if (!this.blockInput) {
-        this.processInput(Button.ACTION);
-      }
-    });
   }
 
   show(args: any[]): boolean {
-    if (args.length === 0 || !args[0].hasOwnProperty("options") || args[0].options.length === 0) {
+    if (args.length === 0 || !Object.hasOwn(args[0], "options") || args[0].options.length === 0) {
       return false;
     }
-
     super.show(args);
 
     this.config = args[0] as OptionSelectConfig;
-    this.setupOptions();
+    this.visibleOptions = this.config.options.filter(o => !o.skip);
+    if (this.visibleOptions.length === 0) {
+      return false;
+    }
+
+    this.layoutWindow();
+    this.rebuildList();
+    this.listHelper!.setItems(this.visibleOptions);
 
     globalScene.ui.bringToTop(this.optionSelectContainer);
-
     this.optionSelectContainer.setVisible(true);
-    this.scrollCursor = 0;
-    this.fullCursor = 0;
-    this.setCursor(0);
 
     if (this.config.delay) {
       this.blockInput = true;
-      this.optionSelectTextContainer.setAlpha(0.5);
-      this.cursorObj?.setAlpha(0.8);
+      this.listHelper!.setAlpha(0.5);
+      this.listHelper!.setTouchEnabled(false);
       globalScene.time.delayedCall(fixedInt(this.config.delay), () => this.unblockInput());
-    }
-
-    if (this.config?.supportHover) {
-      this.config?.options[this.unskippedIndices[this.fullCursor]]?.onHover?.();
     }
 
     return true;
   }
 
+  /** Format an option's label as BBCode using its style (or the default). */
+  private formatLabel(option: OptionSelectItem): string {
+    const shadow = getTextColor(option.style ?? this.defaultTextStyle, true);
+    const color = getTextColor(option.style ?? TextStyle.WINDOW, false);
+    const text = option.item ? `    ${option.label}` : option.label;
+    return `[shadow=${shadow}][color=${color}]${text}[/color][/shadow]`;
+  }
+
+  private layoutWindow(): void {
+    const optionsForWidth =
+      globalScene.ui.getMode() === UiMode.AUTO_COMPLETE
+        ? this.visibleOptions.slice(0, this.config?.maxOptions ?? this.visibleOptions.length)
+        : this.visibleOptions;
+
+    const measure = addBBCodeTextObject(
+      0,
+      0,
+      optionsForWidth.map(o => this.formatLabel(o)).join("\n"),
+      TextStyle.WINDOW,
+      { maxLines: optionsForWidth.length, lineSpacing: 12 },
+    );
+    const measuredWidth = measure.displayWidth;
+    measure.destroy();
+
+    this.optionSelectBg.width = Math.max(measuredWidth + 24, this.getWindowWidth());
+    this.optionSelectBg.height = this.getWindowHeight();
+
+    this.optionSelectContainer.setPosition(
+      globalScene.scaledCanvas.width - 1 - (this.config?.xOffset || 0),
+      -48 + (this.config?.yOffset || 0),
+    );
+  }
+
+  private rebuildList(): void {
+    if (this.listHelper) {
+      this.listHelper.destroy();
+      this.listHelper = null;
+    }
+
+    const rowSpacing = 114 * this.scale - 3;
+    const rows = Math.min(this.visibleOptions.length, this.config?.maxOptions ?? this.visibleOptions.length);
+    const itemsX = this.optionSelectBg.x - this.optionSelectBg.width + 12 + 24 * this.scale;
+    const itemsY = this.optionSelectBg.y - this.optionSelectBg.height + 2 + 42 * this.scale;
+    const itemsWidth = this.optionSelectBg.width - 24;
+    const iconScale = 3 * this.scale;
+
+    this.listHelper = new ScrollableListHelper<OptionSelectItem>(0, 0, {
+      rows,
+      items: { x: itemsX, y: itemsY, rowSpacing, width: itemsWidth },
+      scrollMode: "arrows",
+      arrowStyle: this.defaultTextStyle,
+      cursor: {
+        texture: "cursor",
+        width: 6,
+        height: 10,
+        offsetX: -42 * this.scale,
+        offsetY: 18 * this.scale,
+      },
+      bbcode: true,
+      textOptions: { maxLines: 1 },
+      getLabel: option => this.formatLabel(option),
+      icon: {
+        texture: "items",
+        x: 36 * this.scale,
+        y: 7,
+        scale: iconScale,
+        getFrame: option => option.item ?? null,
+        getTint: option =>
+          option.item === "candy" && option.itemArgs ? argbFromRgba(rgbHexToRgba(option.itemArgs[0])) : null,
+      },
+      overlay: {
+        texture: "items",
+        frame: "candy_overlay",
+        x: 36 * this.scale,
+        y: 7,
+        scale: iconScale,
+        isVisible: option => option.item === "candy",
+        getTint: option => (option.itemArgs ? argbFromRgba(rgbHexToRgba(option.itemArgs[1])) : null),
+      },
+      onItemSelected: option => this.onOptionHovered(option),
+      onItemActioned: option => this.runOption(option),
+    });
+
+    this.optionSelectContainer.add(this.listHelper);
+  }
+
+  /** Fires whenever the highlighted option changes (keyboard, hover, scroll, or setItems). */
+  private onOptionHovered(option: OptionSelectItem): void {
+    if (this.config) {
+      this.cursor = this.config.options.indexOf(option);
+    }
+    if (this.config?.supportHover) {
+      option.onHover?.();
+    }
+  }
+
+  /** Execute an option's handler and update menu state accordingly. */
+  private runOption(option: OptionSelectItem): void {
+    const ui = this.getUi();
+    if (this.blockInput) {
+      ui.playError();
+      return;
+    }
+    if (option.handler()) {
+      if (!option.keepOpen) {
+        this.clear();
+      }
+      if (!option.overrideSound) {
+        ui.playSelect();
+      }
+    } else {
+      ui.playError();
+    }
+  }
+
   processInput(button: Button): boolean {
     const ui = this.getUi();
 
-    let success = false;
-
-    let playSound = true;
-
-    if (button === Button.ACTION || button === Button.CANCEL) {
+    if (button === Button.ACTION) {
       if (this.blockInput) {
         ui.playError();
         return false;
       }
+      return this.listHelper?.processInput(button) ?? false;
+    }
 
-      success = true;
-      if (button === Button.CANCEL) {
-        if (this.config?.maxOptions && this.config.options.length > this.config.maxOptions) {
-          this.setCursor(this.unskippedIndices.length - 1);
-        } else if (this.config?.noCancel) {
-          return false;
-        } else {
-          this.setCursor(this.unskippedIndices.length - 1);
-        }
-      }
-      const option = this.config?.options[this.unskippedIndices[this.fullCursor]];
-      if (option?.handler()) {
-        if (!option.keepOpen) {
-          this.clear();
-        }
-        playSound = !option.overrideSound;
-      } else {
-        ui.playError();
-      }
-    } else if (button === Button.SUBMIT && ui.getMode() === UiMode.AUTO_COMPLETE) {
-      success = true;
-      const option = this.config?.options[this.unskippedIndices[this.fullCursor]];
-      if (option?.handler()) {
-        if (!option.keepOpen) {
-          this.clear();
-        }
-        playSound = !option.overrideSound;
-      } else {
-        ui.playError();
-      }
-    } else {
-      switch (button) {
-        case Button.UP:
-          if (this.fullCursor === 0) {
-            success = this.setCursor(this.unskippedIndices.length - 1);
-          } else if (this.fullCursor) {
-            success = this.setCursor(this.fullCursor - 1);
-          }
-          break;
-        case Button.DOWN:
-          if (this.fullCursor < this.unskippedIndices.length - 1) {
-            success = this.setCursor(this.fullCursor + 1);
-          } else {
-            success = this.setCursor(0);
-          }
-          break;
-      }
-      if (this.config?.supportHover) {
-        this.config?.options[this.unskippedIndices[this.fullCursor]]?.onHover?.();
+    if (button === Button.SUBMIT && ui.getMode() === UiMode.AUTO_COMPLETE) {
+      const wasBlocked = this.blockInput;
+      this.blockInput = false;
+      try {
+        return this.listHelper?.processInput(Button.ACTION) ?? false;
+      } finally {
+        this.blockInput = wasBlocked;
       }
     }
 
-    if (success && playSound) {
-      ui.playSelect();
+    if (button === Button.CANCEL) {
+      if (this.blockInput) {
+        ui.playError();
+        return false;
+      }
+      const scrolling = !!(this.config?.maxOptions && this.config.options.length > this.config.maxOptions);
+      if (this.config?.noCancel && !scrolling) {
+        return false;
+      }
+      const last = this.visibleOptions.at(-1);
+      if (last) {
+        this.runOption(last);
+      }
+      return true;
     }
 
-    return success;
+    if (button === Button.UP || button === Button.DOWN) {
+      const success = this.listHelper?.processInput(button) ?? false;
+      if (success) {
+        ui.playSelect();
+      }
+      return success;
+    }
+
+    return false;
   }
 
   unblockInput(): void {
     if (!this.blockInput) {
       return;
     }
-
     this.blockInput = false;
-    this.optionSelectTextContainer.setAlpha(1);
-    this.cursorObj?.setAlpha(1);
-  }
-
-  getOptionsWithScroll(): OptionSelectItem[] {
-    if (!this.config) {
-      return [];
-    }
-
-    const options = this.config.options.slice(0);
-
-    if (!this.config.maxOptions || this.config.options.length < this.config.maxOptions) {
-      return options;
-    }
-
-    const optionsScrollTotal = options.length;
-    const optionStartIndex = this.scrollCursor;
-    const optionEndIndex = Math.min(
-      optionsScrollTotal,
-      optionStartIndex
-        + (!optionStartIndex || this.scrollCursor + (this.config.maxOptions - 1) >= optionsScrollTotal
-          ? this.config.maxOptions - 1
-          : this.config.maxOptions - 2),
-    );
-
-    if (this.config?.maxOptions && options.length > this.config.maxOptions) {
-      options.splice(optionEndIndex, optionsScrollTotal);
-      options.splice(0, optionStartIndex);
-      if (optionStartIndex) {
-        options.unshift({
-          label: scrollUpLabel,
-          handler: () => true,
-          style: this.defaultTextStyle,
-        });
-      }
-      if (optionEndIndex < optionsScrollTotal) {
-        options.push({
-          label: scrollDownLabel,
-          handler: () => true,
-          style: this.defaultTextStyle,
-        });
-      }
-    }
-
-    return options;
-  }
-
-  getUnskippedIndices(options: OptionSelectItem[]) {
-    const unskippedIndices = options
-      .map((option, index) => (option.skip ? null : index))
-      .filter(index => index !== null) as number[];
-    return unskippedIndices;
-  }
-
-  setCursor(fullCursor: number): boolean {
-    const changed = this.fullCursor !== fullCursor;
-
-    if (changed && this.config?.maxOptions && this.config.options.length > this.config.maxOptions) {
-      if (fullCursor === this.unskippedIndices.length - 1) {
-        this.fullCursor = fullCursor;
-        this.cursor = this.config.maxOptions - (this.config.options.length - this.unskippedIndices[fullCursor]);
-        this.scrollCursor = this.config.options.length - this.config.maxOptions + 1;
-      } else if (fullCursor === 0) {
-        this.fullCursor = fullCursor;
-        this.cursor = this.unskippedIndices[fullCursor];
-        this.scrollCursor = 0;
-      } else {
-        const isDown = fullCursor && fullCursor > this.fullCursor;
-
-        if (isDown) {
-          const jumpFromCurrent = this.unskippedIndices[fullCursor] - this.unskippedIndices[this.fullCursor];
-          const skipsFromNext = this.unskippedIndices[fullCursor + 1] - this.unskippedIndices[fullCursor] - 1;
-
-          if (this.cursor + jumpFromCurrent + skipsFromNext >= this.config.maxOptions - 1) {
-            this.fullCursor = fullCursor;
-            this.cursor = this.config.maxOptions - 2 - skipsFromNext;
-            this.scrollCursor = this.unskippedIndices[this.fullCursor] - this.cursor + 1;
-          } else {
-            this.fullCursor = fullCursor;
-            this.cursor = this.unskippedIndices[fullCursor] - this.scrollCursor + (this.scrollCursor ? 1 : 0);
-          }
-        } else {
-          const jumpFromPrevious = this.unskippedIndices[fullCursor] - this.unskippedIndices[fullCursor - 1];
-
-          if (this.cursor - jumpFromPrevious < 1) {
-            this.fullCursor = fullCursor;
-            this.cursor = 1;
-            this.scrollCursor = this.unskippedIndices[this.fullCursor] - this.cursor + 1;
-          } else {
-            this.fullCursor = fullCursor;
-            this.cursor = this.unskippedIndices[fullCursor] - this.scrollCursor + (this.scrollCursor ? 1 : 0);
-          }
-        }
-      }
-    } else {
-      this.fullCursor = fullCursor;
-      this.cursor = this.unskippedIndices[fullCursor];
-    }
-
-    this.setupOptions();
-
-    if (!this.cursorObj) {
-      this.cursorObj = globalScene.add.image(0, 0, "cursor");
-      this.optionSelectContainer.add(this.cursorObj);
-    }
-
-    this.cursorObj.setScale(this.scale * 6);
-    this.cursorObj.setPositionRelative(
-      this.optionSelectBg,
-      12,
-      102 * this.scale + this.cursor * (114 * this.scale - 3),
-    );
-
-    return changed;
+    this.listHelper?.setAlpha(1);
+    this.listHelper?.setTouchEnabled(true);
   }
 
   clear() {
     super.clear();
     this.config = null;
+    this.visibleOptions = [];
     this.optionSelectContainer.setVisible(false);
-    this.fullCursor = 0;
-    this.scrollCursor = 0;
-    this.eraseCursor();
-  }
-
-  eraseCursor() {
-    if (this.cursorObj) {
-      this.cursorObj.destroy();
-    }
-    this.cursorObj = null;
+    this.listHelper?.reset();
   }
 }
