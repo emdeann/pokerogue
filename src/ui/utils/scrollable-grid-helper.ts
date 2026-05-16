@@ -1,145 +1,436 @@
+import { globalScene } from "#app/global-scene";
 import { Button } from "#enums/buttons";
+import { TextStyle } from "#enums/text-style";
 import { ScrollBar } from "#ui/scroll-bar";
-
-type UpdateGridCallbackFunction = () => void;
-type UpdateDetailsCallbackFunction = (index: number) => void;
+import { addTextObject } from "#ui/text";
 
 /**
- * A helper class to handle navigation through a grid of elements that can scroll vertically
- * Uses callbacks to communicate with consumers rather than maintaining direct references
- * How to use:
- * - in `UiHandler.setup`: Initialize with the grid dimensions and positioning,
- * then use chainable methods to set up callbacks for grid/detail updates
- * - in `UiHandler.show`: Set `setTotalElements` to the total number of elements in the list to display
- * - in `UiHandler.processInput`: call `processInput` to have it handle the cursor updates
- * - in `UiHandler.clear`: call `reset`
+ * Minimal type for a renderable grid cell based on usage
  */
-export class ScrollableGridHelper {
-  private readonly ROWS: number;
-  private readonly COLUMNS: number;
-  private totalElements: number;
-  private cursor: number;
-  private readonly scrollBar: ScrollBar;
-  /** Optional function that will get called if the whole grid needs to get updated */
-  private updateGridCallback?: UpdateGridCallbackFunction;
-  /** Optional function that will get called if a single element's information needs to get updated */
-  private updateDetailsCallback?: UpdateDetailsCallbackFunction;
-  /** Optional function that will get called when the cursor changes */
-  private cursorUpdateCallback?: (cursor: number) => void;
-  private silentScroll: boolean;
+export type GridCell = Phaser.GameObjects.GameObject &
+  Phaser.GameObjects.Components.Transform &
+  Phaser.GameObjects.Components.Visible & {
+    width: number;
+    height: number;
+    originX: number;
+    originY: number;
+  };
+
+export interface ScrollableGridConfig<TCell extends GridCell, TData> {
+  /** Maximum number of rows shown at once */
+  rows: number;
+  /** Number of columns */
+  columns: number;
+
+  /** Scroll bar config local to the grid container */
+  scrollBar: { x: number; y: number; width: number; height: number };
+
+  /** Cell grid configuration */
+  cells: {
+    /** x position of the cells sub-container */
+    x: number;
+    /** y position of the cells sub-container */
+    y: number;
+    /** horizontal pixel distance between adjacent cells */
+    spacingX: number;
+    /** vertical pixel distance between adjacent cells */
+    spacingY: number;
+    /** Factory used to create each cell */
+    createCell: () => TCell;
+    /** Called whenever a cell must (re-)render the given data */
+    renderCell: (cell: TCell, data: TData) => void;
+  };
+
+  /** Selection cursor configuration. Defaults to `select_cursor_highlight` at 16×16. */
+  cursor?:
+    | {
+        texture: string;
+        width: number;
+        height: number;
+        /** Pixel offset from the cell's top-left where the cursor is drawn */
+        offsetX?: number;
+        offsetY?: number;
+      }
+    | undefined;
 
   /**
-   * @param rows the maximum number of rows shown at once
-   * @param columns the maximum number of columns shown at once
-   * @param x the scrollbar's x position (origin: top left)
-   * @param y the scrollbar's y position (origin: top left)
-   * @param width the scrollbar's width
-   * @param height the scrollbar's height
+   * Called whenever the highlighted item changes (cursor move, scroll, hover, or {@linkcode setItems}).
+   * Receives the cell game object and the data item it currently represents.
    */
-  constructor(rows: number, columns: number, x: number, y: number, width: number, height: number) {
-    this.ROWS = rows;
-    this.COLUMNS = columns;
-    this.cursor = 0;
-    this.totalElements = rows * columns;
-    this.silentScroll = false;
+  onItemSelected?: ((cell: TCell, data: TData) => void) | undefined;
 
-    this.scrollBar = new ScrollBar(x, y, width, height, rows, (newRow: number) => {
-      if (!this.silentScroll) {
-        this.handleScrollChange(newRow);
-      }
+  /**
+   * Called when the user presses {@linkcode Button.ACTION} or clicks the currently highlighted cell.
+   * If omitted, these actions do nothing.
+   */
+  onItemActioned?: ((cell: TCell, data: TData) => void) | undefined;
+
+  /** Whether to scroll by top/bottom arrows or scrollbar */
+  scrollMode?: "scrollbar" | "arrows" | "none" | undefined;
+  /** Style for scroll arrows. Unused unless {@linkcode scrollMode} is set to "arrows" */
+  arrowStyle?: TextStyle | undefined;
+}
+
+/**
+ * A scrollable grid of cells. It is a container and can be added to the consumer for positioning.
+ *
+ * Handles all common tasks to grids and menus: item display, cursor movement, touch input, scrolling, etc.
+ */
+export class ScrollableGridHelper<TCell extends GridCell, TData> extends Phaser.GameObjects.Container {
+  private readonly ROWS: number;
+  private readonly COLUMNS: number;
+  private readonly config: ScrollableGridConfig<TCell, TData>;
+  private readonly scrollBar: ScrollBar;
+  private readonly cellsContainer: Phaser.GameObjects.Container;
+  private readonly cells: TCell[];
+  private cursorObj: Phaser.GameObjects.NineSlice | null = null;
+
+  private items: TData[] = [];
+  private cursor = 0;
+  /** If true, suppress scroll events */
+  private silentScroll = false;
+  private readonly scrollMode: "scrollbar" | "arrows" | "none";
+  private readonly upArrow: Phaser.GameObjects.Text | null = null;
+  private readonly downArrow: Phaser.GameObjects.Text | null = null;
+  /** Whether touch controls are currently accepted by this grid */
+  private touchEnabled = true;
+
+  /**
+   * @param x - The x coordinate for the grid container
+   * @param y - The y coordinate for the grid container
+   * @param config - Configuration for the grid itself
+   */
+  constructor(x: number, y: number, config: ScrollableGridConfig<TCell, TData>) {
+    super(globalScene, x, y);
+    globalScene.add.existing(this);
+
+    this.config = config;
+    this.ROWS = config.rows;
+    this.COLUMNS = config.columns;
+    this.scrollMode = config.scrollMode ?? "scrollbar";
+
+    this.scrollBar = new ScrollBar(
+      config.scrollBar.x,
+      config.scrollBar.y,
+      config.scrollBar.width,
+      config.scrollBar.height,
+      this.ROWS,
+      (newRow: number) => {
+        if (!this.silentScroll) {
+          this.handleScrollChange(newRow);
+        }
+      },
+    );
+
+    this.cellsContainer = globalScene.add.container(config.cells.x, config.cells.y);
+    this.cells = [];
+    for (let i = 0; i < this.ROWS * this.COLUMNS; i++) {
+      const cell = config.cells.createCell();
+      cell.setPosition(
+        (i % this.COLUMNS) * config.cells.spacingX,
+        Math.floor(i / this.COLUMNS) * config.cells.spacingY,
+      );
+      this.cells.push(cell);
+      this.cellsContainer.add(cell);
+    }
+
+    this.add([this.scrollBar, this.cellsContainer]);
+
+    if (this.scrollMode === "arrows") {
+      const arrowX = config.cells.x + ((this.COLUMNS - 1) * config.cells.spacingX) / 2;
+      const cellsBottom = config.cells.y + this.ROWS * config.cells.spacingY;
+      const arrowStyle = config.arrowStyle ?? TextStyle.WINDOW;
+
+      this.upArrow = addTextObject(arrowX, config.cells.y, "↑", arrowStyle).setOrigin(0.5, 1);
+      this.downArrow = addTextObject(arrowX, cellsBottom, "↓", arrowStyle).setOrigin(0.5, 0);
+      this.upArrow.setVisible(false);
+      this.downArrow.setVisible(false);
+
+      this.add([this.upArrow, this.downArrow]);
+    }
+    this.scrollBar.setVisible(false);
+    this.cellsContainer.setInteractive(
+      new Phaser.Geom.Rectangle(0, 0, this.COLUMNS * config.cells.spacingX, this.ROWS * config.cells.spacingY),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    this.enableTouchEvents();
+  }
+
+  private enableTouchEvents(): void {
+    this.cellsContainer.on("pointermove", (_pointer: Phaser.Input.Pointer, localX: number, localY: number) => {
+      this.handlePointerMove(localX, localY);
+    });
+
+    this.cellsContainer.on("pointerdown", (_pointer: Phaser.Input.Pointer, localX: number, localY: number) => {
+      this.handlePointerDown(localX, localY);
     });
   }
 
   /**
-   * Get the ScrollBar instance managed by this helper
-   * @returns the ScrollBar
+   * Replace the items to be displayed. Resets the cursor and scroll position, redraws the grid,
+   * and fires {@linkcode ScrollableGridConfig.onItemSelected} for the first item (if any).
    */
-  getScrollBar(): ScrollBar {
-    return this.scrollBar;
+  setItems(items: TData[]): void {
+    this.items = items;
+    this.scrollBar.setTotalRows(Math.ceil(items.length / this.COLUMNS));
+    this.setScrollCursor(0, 0);
+    this.refreshAll();
+  }
+
+  /** Reset scrolling + cursor position and remove the cursor visual. */
+  reset(): void {
+    this.setScrollCursor(0, 0);
+    if (this.cursorObj) {
+      this.cursorObj.destroy();
+      this.cursorObj = null;
+    }
   }
 
   /**
-   * Get the current cursor position within the visible grid
-   * @returns the cursor position (0-based index within displayed rows)
+   * Process keyboard input.
+   * @returns `true` if the input was consumed
    */
-  getCursor(): number {
-    return this.cursor;
+  processInput(button: Button): boolean {
+    if (button === Button.ACTION) {
+      return this.processActionInput();
+    }
+
+    if (this.items.length === 0) {
+      return false;
+    }
+
+    const scrollCursor = this.scrollBar.getCurrentRow();
+    const onScreenRows = Math.min(this.ROWS, Math.ceil(this.items.length / this.COLUMNS));
+    const maxScrollCursor = Math.max(0, Math.ceil(this.items.length / this.COLUMNS) - onScreenRows);
+    const currentRowIndex = Math.floor(this.cursor / this.COLUMNS);
+    const currentColumnIndex = this.cursor % this.COLUMNS;
+    const itemOffset = scrollCursor * this.COLUMNS;
+    const lastVisibleIndex = Math.min(this.items.length - 1, this.items.length - maxScrollCursor * this.COLUMNS - 1);
+
+    switch (button) {
+      case Button.UP:
+        return this.processUpInput(scrollCursor, maxScrollCursor, currentRowIndex, onScreenRows, lastVisibleIndex);
+      case Button.DOWN:
+        return this.processDownInput(scrollCursor, maxScrollCursor, currentRowIndex, onScreenRows, itemOffset);
+      case Button.LEFT:
+        return this.processLeftInput(
+          scrollCursor,
+          maxScrollCursor,
+          currentRowIndex,
+          currentColumnIndex,
+          onScreenRows,
+          lastVisibleIndex,
+        );
+      case Button.RIGHT:
+        return this.processRightInput(currentColumnIndex, itemOffset);
+    }
+    return false;
   }
 
   /**
-   * Set a callback for when the cursor position changes
-   * @param callback function to call with the new cursor position
-   * @returns this
+   * Convert a pointer position (local to the cells container) to a cell slot index,
+   * or `null` if the position is outside the grid or over an empty slot.
    */
-  withCursorCallback(callback: (cursor: number) => void): ScrollableGridHelper {
-    this.cursorUpdateCallback = callback;
-    return this;
+  private pointerToSlot(localX: number, localY: number): number | null {
+    const col = Math.floor(localX / this.config.cells.spacingX);
+    const row = Math.floor(localY / this.config.cells.spacingY);
+
+    if (col < 0 || col >= this.COLUMNS || row < 0 || row >= this.ROWS) {
+      return null;
+    }
+
+    const slot = row * this.COLUMNS + col;
+
+    if (slot + this.getItemOffset() >= this.items.length) {
+      return null;
+    }
+
+    return slot;
   }
 
   /**
-   * Set function that will get called if the whole grid needs to get updated
-   * @param callback {@linkcode UpdateGridCallbackFunction}
-   * @returns this
+   * Set whether this grid should be accepting touch input.
    */
-  withUpdateGridCallBack(callback: UpdateGridCallbackFunction): ScrollableGridHelper {
-    this.updateGridCallback = callback;
-    return this;
+  public setTouchEnabled(enabled: boolean): void {
+    this.touchEnabled = enabled;
   }
 
   /**
-   * Set function that will get called if a single element's information needs to get updated
-   * @param callback {@linkcode UpdateDetailsCallbackFunction}
-   * @returns this
+   * Event handler to run when the pointer (mouse or touch) is hovered over a cell.
    */
-  withUpdateSingleElementCallback(callback: UpdateDetailsCallbackFunction): ScrollableGridHelper {
-    this.updateDetailsCallback = callback;
-    return this;
+  private handlePointerMove(localX: number, localY: number): void {
+    if (!this.touchEnabled) {
+      return;
+    }
+    const slot = this.pointerToSlot(localX, localY);
+    if (slot !== null && slot !== this.cursor) {
+      this.setCursor(slot);
+    }
   }
 
   /**
-   * @param totalElements the total number of elements that the grid needs to display
+   * Event handler to run when the pointer is clicked/pressed on a cell.
    */
-  setTotalElements(totalElements: number): void {
-    this.totalElements = totalElements;
-    this.scrollBar.setTotalRows(Math.ceil(this.totalElements / this.COLUMNS));
-    this.silentScroll = true;
-    this.scrollBar.setScrollCursor(0);
-    this.silentScroll = false;
-    this.cursor = 0;
+  private handlePointerDown(localX: number, localY: number): void {
+    if (!this.touchEnabled) {
+      return;
+    }
+    const slot = this.pointerToSlot(localX, localY);
+    if (slot === null) {
+      return;
+    }
+    if (slot === this.cursor) {
+      this.processActionInput();
+    } else {
+      this.setCursor(slot);
+    }
   }
 
   /**
-   * @returns how many elements are hidden due to scrolling
+   * Called on action input, runs the on action callback if one was provided.
+   * @returns `true` if the callback was called
    */
-  getItemOffset(): number {
+  private processActionInput(): boolean {
+    if (!this.config.onItemActioned || this.items.length === 0) {
+      return false;
+    }
+    const absIndex = this.cursor + this.getItemOffset();
+    if (absIndex >= this.items.length) {
+      return false;
+    }
+    this.config.onItemActioned(this.cells[this.cursor], this.items[absIndex]);
+    return true;
+  }
+
+  /**
+   * @returns The offset from relative index to absolute index for an item given the scroll amount
+   */
+  private getItemOffset(): number {
     return this.scrollBar.getCurrentRow() * this.COLUMNS;
   }
 
   /**
-   * Get the current scroll row (page) from the scrollbar
-   * @returns the current scroll row
+   * Render cells for each visible item; hide any unoccupied cells.
    */
-  getScrollRow(): number {
-    return this.scrollBar.getCurrentRow();
+  private renderGrid(): void {
+    const offset = this.getItemOffset();
+    const visible = this.items.slice(offset, offset + this.cells.length);
+    visible.forEach((data, i) => {
+      this.cells[i].setVisible(true);
+      this.config.cells.renderCell(this.cells[i], data);
+    });
+    for (let i = visible.length; i < this.cells.length; i++) {
+      this.cells[i].setVisible(false);
+    }
   }
 
   /**
-   * Handle scroll changes from the ScrollBar
-   * @param newRow the new scroll row
+   * Update the location of the cursor based on its current location, creating a new texture if one doesn't exist.
+   */
+  private updateCursorVisual(): void {
+    if (this.items.length === 0) {
+      if (this.cursorObj) {
+        this.cursorObj.setVisible(false);
+      }
+      return;
+    }
+    const cfg = this.config.cursor ?? { texture: "select_cursor_highlight", width: 16, height: 16 };
+    if (!this.cursorObj) {
+      this.cursorObj = globalScene.add
+        .nineslice(0, 0, cfg.texture, undefined, cfg.width, cfg.height, 1, 1, 1, 1)
+        .setOrigin(0);
+      this.cellsContainer.add(this.cursorObj);
+    }
+    this.cursorObj.setVisible(true);
+    this.cursorObj.setPositionRelative(this.cells[this.cursor], cfg.offsetX ?? 0, cfg.offsetY ?? 0);
+  }
+
+  /**
+   * Run the `onItemSelected` callback for the selected item, if the callback was defined.
+   */
+  private notifySelection(): void {
+    if (!this.config.onItemSelected || this.items.length === 0) {
+      return;
+    }
+    const absIndex = this.cursor + this.getItemOffset();
+    if (absIndex < this.items.length) {
+      this.config.onItemSelected(this.cells[this.cursor], this.items[absIndex]);
+    }
+  }
+
+  /**
+   * Refresh all grid elements.
+   */
+  private refreshAll(): void {
+    this.renderGrid();
+    this.updateCursorVisual();
+    this.updateScrollIndicators();
+    this.notifySelection();
+  }
+
+  /**
+   * Show/hide the scrollbar or arrow indicators based on the current scroll state.
+   * If all items fit without scrolling, all indicators are hidden regardless of mode.
+   */
+  private updateScrollIndicators(): void {
+    const totalCellSlots = this.ROWS * this.COLUMNS;
+    const needsScroll = this.items.length > totalCellSlots;
+    const offset = this.getItemOffset();
+    const canScrollUp = needsScroll && offset > 0;
+    const canScrollDown = needsScroll && offset + totalCellSlots < this.items.length;
+
+    switch (this.scrollMode) {
+      case "scrollbar":
+        this.scrollBar.setVisible(needsScroll);
+        break;
+      case "arrows":
+        this.scrollBar.setVisible(false);
+        this.upArrow?.setVisible(canScrollUp);
+        this.downArrow?.setVisible(canScrollDown);
+        break;
+      case "none":
+        this.scrollBar.setVisible(false);
+        break;
+    }
+  }
+
+  /**
+   * Callback to handle a row change notification from the ScrollBar.
+   * @param newRow - The new scrolled row
    */
   private handleScrollChange(newRow: number): void {
     const itemOffset = newRow * this.COLUMNS;
-    const maxCursor = Math.min(this.cursor, this.totalElements - itemOffset - 1);
-
+    const maxCursor = Math.min(this.cursor, this.items.length - itemOffset - 1);
     if (maxCursor !== this.cursor) {
-      this.setCursor(maxCursor);
-    } else if (this.updateDetailsCallback) {
-      this.updateDetailsCallback(this.cursor + itemOffset);
+      this.cursor = maxCursor;
     }
+    this.refreshAll();
+  }
 
-    if (this.updateGridCallback) {
-      this.updateGridCallback();
+  /**
+   * Set the cursor to the given relative location.
+   * @param cursor - The new location for the cursor
+   * @returns If the cursor actually moved (i.e. if the new location is different)
+   */
+  private setCursor(cursor: number): boolean {
+    if (cursor === this.cursor) {
+      return false;
     }
+    this.cursor = cursor;
+    this.updateCursorVisual();
+    this.notifySelection();
+    return true;
+  }
+
+  private setScrollCursor(scrollCursor: number, cursor?: number): boolean {
+    if (cursor !== undefined) {
+      this.cursor = cursor;
+    }
+    this.silentScroll = true;
+    this.scrollBar.setScrollCursor(scrollCursor);
+    this.silentScroll = false;
+    this.refreshAll();
+    return true;
   }
 
   private processUpInput(
@@ -170,7 +461,7 @@ export class ScrollableGridHelper {
     itemOffset: number,
   ): boolean {
     if (currentRowIndex < onScreenRows - 1) {
-      return this.setCursor(Math.min(this.cursor + this.COLUMNS, this.totalElements - itemOffset - 1));
+      return this.setCursor(Math.min(this.cursor + this.COLUMNS, this.items.length - itemOffset - 1));
     }
     if (scrollCursor < maxScrollCursor) {
       return this.setScrollCursor(scrollCursor + 1);
@@ -196,93 +487,9 @@ export class ScrollableGridHelper {
   }
 
   private processRightInput(currentColumnIndex: number, itemOffset: number): boolean {
-    if (currentColumnIndex < this.COLUMNS - 1 && this.cursor + itemOffset < this.totalElements - 1) {
+    if (currentColumnIndex < this.COLUMNS - 1 && this.cursor + itemOffset < this.items.length - 1) {
       return this.setCursor(this.cursor + 1);
     }
     return this.setCursor(this.cursor - currentColumnIndex);
-  }
-
-  /**
-   * Update the cursor and scrollCursor based on user input
-   * @param button the button that was pressed
-   * @returns `true` if either the cursor or scrollCursor was updated
-   */
-  processInput(button: Button): boolean {
-    let success = false;
-    const scrollCursor = this.scrollBar.getCurrentRow();
-    const onScreenRows = Math.min(this.ROWS, Math.ceil(this.totalElements / this.COLUMNS));
-    const maxScrollCursor = Math.max(0, Math.ceil(this.totalElements / this.COLUMNS) - onScreenRows);
-    const currentRowIndex = Math.floor(this.cursor / this.COLUMNS);
-    const currentColumnIndex = this.cursor % this.COLUMNS;
-    const itemOffset = scrollCursor * this.COLUMNS;
-    const lastVisibleIndex = Math.min(this.totalElements - 1, this.totalElements - maxScrollCursor * this.COLUMNS - 1);
-
-    switch (button) {
-      case Button.UP:
-        success = this.processUpInput(scrollCursor, maxScrollCursor, currentRowIndex, onScreenRows, lastVisibleIndex);
-        break;
-      case Button.DOWN:
-        success = this.processDownInput(scrollCursor, maxScrollCursor, currentRowIndex, onScreenRows, itemOffset);
-        break;
-      case Button.LEFT:
-        this.processLeftInput(
-          scrollCursor,
-          maxScrollCursor,
-          currentRowIndex,
-          currentColumnIndex,
-          onScreenRows,
-          lastVisibleIndex,
-        );
-        break;
-      case Button.RIGHT:
-        this.processRightInput(currentColumnIndex, itemOffset);
-        break;
-    }
-    return success;
-  }
-
-  /**
-   * Reset the scrolling and cursor position
-   */
-  reset(): void {
-    this.silentScroll = true;
-    this.scrollBar.setScrollCursor(0);
-    this.silentScroll = false;
-    this.cursor = 0;
-  }
-
-  /**
-   * Update the cursor position and notify via callback
-   * @param cursor the new cursor position
-   * @returns whether the cursor actually changed
-   */
-  private setCursor(cursor: number): boolean {
-    if (cursor === this.cursor) {
-      return false;
-    }
-    this.cursor = cursor;
-    if (this.cursorUpdateCallback) {
-      this.cursorUpdateCallback(cursor);
-    }
-    return true;
-  }
-
-  private setScrollCursor(scrollCursor: number, cursor?: number): boolean {
-    let changed = false;
-
-    this.scrollBar.setScrollCursor(scrollCursor);
-    changed = true;
-
-    if (cursor !== undefined) {
-      changed = this.setCursor(cursor) || changed;
-    } else {
-      const itemOffset = scrollCursor * this.COLUMNS;
-      const maxCursor = Math.min(this.cursor, this.totalElements - itemOffset - 1);
-      if (maxCursor !== this.cursor) {
-        changed = this.setCursor(maxCursor) || changed;
-      }
-    }
-
-    return changed;
   }
 }
