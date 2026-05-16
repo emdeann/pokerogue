@@ -23,12 +23,8 @@ const iconSize = 18;
 export class EggSummaryUiHandler extends MessageUiHandler {
   /** holds all elements in the scene */
   private eggHatchContainer: Phaser.GameObjects.Container;
-  /** holds the icon containers and info container */
+  /** holds the grid helper and info container */
   private summaryContainer: Phaser.GameObjects.Container;
-  /** container for the each pokemon sprites and icons */
-  private pokemonIconsContainer: Phaser.GameObjects.Container;
-  /** list of the containers added to pokemonIconsContainer for easier access */
-  private pokemonContainers: HatchedPokemonContainer[];
 
   /** hatch info container that displays the current pokemon / hatch (main element on left hand side) */
   private infoContainer: PokemonHatchInfoContainer;
@@ -37,8 +33,13 @@ export class EggSummaryUiHandler extends MessageUiHandler {
   private eggHatchBg: Phaser.GameObjects.Image;
   private eggHatchData: EggHatchData[];
 
-  private scrollGridHandler: ScrollableGridHelper;
-  private cursorObj: Phaser.GameObjects.Image;
+  private gridHelper: ScrollableGridHelper<Phaser.GameObjects.Container, EggHatchData>;
+  /**
+   * Maps each cell wrapper to its lazily-created {@linkcode HatchedPokemonContainer} child.
+   * Populated during {@linkcode renderHatchCell}, cleared during {@linkcode clear}.
+   */
+  private hatchedContainers: Map<Phaser.GameObjects.Container, HatchedPokemonContainer> = new Map();
+  private lastAnimatedHpc: HatchedPokemonContainer | null = null;
 
   /** used to add a delay before which it is not possible to exit the summary */
   private blockExit: boolean;
@@ -73,13 +74,28 @@ export class EggSummaryUiHandler extends MessageUiHandler {
     this.eggHatchBg.setOrigin(0, 0);
     this.eggHatchContainer.add(this.eggHatchBg);
 
-    this.cursorObj = globalScene.add.image(0, 0, "select_cursor");
-    this.cursorObj.setOrigin(0, 0);
-    this.summaryContainer.add(this.cursorObj);
-
-    this.pokemonContainers = [];
-    this.pokemonIconsContainer = globalScene.add.container(iconContainerX, iconContainerY);
-    this.summaryContainer.add(this.pokemonIconsContainer);
+    this.hatchedContainers = new Map();
+    this.gridHelper = new ScrollableGridHelper<Phaser.GameObjects.Container, EggHatchData>(0, 0, {
+      rows: numRows,
+      columns: numCols,
+      scrollBar: {
+        x: iconContainerX + numCols * iconSize,
+        y: iconContainerY + 3,
+        width: 4,
+        height: globalScene.scaledCanvas.height - 20,
+      },
+      cells: {
+        x: iconContainerX,
+        y: iconContainerY,
+        spacingX: iconSize,
+        spacingY: iconSize,
+        createCell: () => globalScene.add.container(0, 0),
+        renderCell: (cell, hatchData) => this.renderHatchCell(cell, hatchData),
+      },
+      cursor: { texture: "select_cursor", width: iconSize, height: iconSize },
+      onItemSelected: (cell, hatchData) => this.onHatchSelected(cell, hatchData),
+    });
+    this.summaryContainer.add(this.gridHelper);
 
     this.infoContainer = new PokemonHatchInfoContainer(this.summaryContainer);
     this.infoContainer.setup();
@@ -87,29 +103,47 @@ export class EggSummaryUiHandler extends MessageUiHandler {
     this.infoContainer.setVisible(true);
     this.summaryContainer.add(this.infoContainer);
 
-    this.scrollGridHandler = new ScrollableGridHelper(
-      numRows,
-      numCols,
-      iconContainerX + numCols * iconSize,
-      iconContainerY + 3,
-      4,
-      globalScene.scaledCanvas.height - 20,
-    )
-      .withCursorCallback(() => this.updateCursorPosition())
-      .withUpdateGridCallBack(() => this.updatePokemonIcons())
-      .withUpdateSingleElementCallback((i: number) => this.infoContainer.showHatchInfo(this.eggHatchData[i]));
-
     this.cursor = -1;
+  }
+
+  /**
+   * Lazily creates (or reuses) a {@linkcode HatchedPokemonContainer} inside
+   * the wrapper cell and updates it with the given hatch data.
+   */
+  private renderHatchCell(cell: Phaser.GameObjects.Container, hatchData: EggHatchData): void {
+    let hpc = this.hatchedContainers.get(cell);
+    if (!hpc) {
+      hpc = new HatchedPokemonContainer(0, 0, hatchData);
+      cell.add(hpc);
+      this.hatchedContainers.set(cell, hpc);
+    }
+    hpc.updateAndAnimate(hatchData, this.iconAnimHandler);
+  }
+
+  /**
+   * Called by the grid helper whenever the highlighted hatch entry changes.
+   */
+  private onHatchSelected(cell: Phaser.GameObjects.Container, hatchData: EggHatchData): void {
+    if (this.lastAnimatedHpc) {
+      this.iconAnimHandler.addOrUpdate(this.lastAnimatedHpc.icon, PokemonIconAnimMode.NONE);
+    }
+
+    const hpc = this.hatchedContainers.get(cell);
+    if (hpc) {
+      this.iconAnimHandler.addOrUpdate(hpc.icon, PokemonIconAnimMode.ACTIVE);
+      this.lastAnimatedHpc = hpc;
+    }
+
+    this.infoContainer.showHatchInfo(hatchData);
   }
 
   clear() {
     super.clear();
-    this.scrollGridHandler.reset();
+    this.gridHelper.reset();
     this.cursor = -1;
+    this.lastAnimatedHpc = null;
 
     this.summaryContainer.setVisible(false);
-    this.pokemonIconsContainer.removeAll(true);
-    this.pokemonContainers = [];
     this.eggHatchBg.setVisible(false);
     this.getUi().hideTooltip();
 
@@ -133,6 +167,10 @@ export class EggSummaryUiHandler extends MessageUiHandler {
     this.eggHatchData.length = 0;
     // Removes Pokemon icons in EggSummaryUiHandler
     this.iconAnimHandler.removeAll();
+    for (const [cell, hpc] of this.hatchedContainers) {
+      cell.remove(hpc, true);
+    }
+    this.hatchedContainers.clear();
   }
 
   /**
@@ -168,9 +206,7 @@ export class EggSummaryUiHandler extends MessageUiHandler {
     this.eggHatchBg.setVisible(true);
     this.infoContainer.hideDisplayPokemon();
 
-    this.scrollGridHandler.setTotalElements(this.eggHatchData.length);
-    this.updatePokemonIcons();
-    this.updateCursorPosition();
+    this.gridHelper.setItems(this.eggHatchData);
 
     globalScene.playSoundWithoutBgm("evolution_fanfare");
 
@@ -181,62 +217,6 @@ export class EggSummaryUiHandler extends MessageUiHandler {
     globalScene.time.delayedCall(exitBlockingDuration, () => (this.blockExit = false));
 
     return true;
-  }
-
-  /**
-   * Show the grid of Pokemon icons
-   */
-  private updatePokemonIcons(): void {
-    const itemOffset = this.scrollGridHandler.getItemOffset();
-    const eggsToShow = Math.min(numRows * numCols, this.eggHatchData.length - itemOffset);
-
-    for (let i = 0; i < numRows * numCols; i++) {
-      const hatchData = this.eggHatchData[i + itemOffset];
-      let hatchContainer = this.pokemonContainers[i];
-
-      if (i < eggsToShow) {
-        if (!hatchContainer) {
-          const x = (i % numCols) * iconSize;
-          const y = Math.floor(i / numCols) * iconSize;
-          hatchContainer = new HatchedPokemonContainer(x, y, hatchData).setVisible(false);
-          this.pokemonContainers.push(hatchContainer);
-          this.pokemonIconsContainer.add(hatchContainer);
-        }
-        hatchContainer.setVisible(true);
-        hatchContainer.updateAndAnimate(hatchData, this.iconAnimHandler);
-      } else if (hatchContainer) {
-        hatchContainer.setVisible(false);
-        this.iconAnimHandler.addOrUpdate(hatchContainer.icon, PokemonIconAnimMode.NONE);
-      }
-    }
-  }
-
-  /**
-   * Update the visual cursor position and details based on the helper's current cursor state
-   */
-  private updateCursorPosition(): void {
-    const cursor = this.scrollGridHandler.getCursor();
-
-    if (cursor === undefined || cursor < 0) {
-      return;
-    }
-
-    const lastCursor = this.cursor;
-    const changed = super.setCursor(cursor);
-
-    if (changed) {
-      this.cursorObj.setPosition(
-        iconContainerX - 1 + iconSize * (cursor % numCols),
-        iconContainerY + 1 + iconSize * Math.floor(cursor / numCols),
-      );
-
-      if (lastCursor > -1) {
-        this.iconAnimHandler.addOrUpdate(this.pokemonContainers[lastCursor].icon, PokemonIconAnimMode.NONE);
-      }
-      this.iconAnimHandler.addOrUpdate(this.pokemonContainers[cursor].icon, PokemonIconAnimMode.ACTIVE);
-
-      this.infoContainer.showHatchInfo(this.eggHatchData[cursor + this.scrollGridHandler.getItemOffset()]);
-    }
   }
 
   processInput(button: Button): boolean {
@@ -255,7 +235,7 @@ export class EggSummaryUiHandler extends MessageUiHandler {
         success = true;
       }
     } else {
-      success = this.scrollGridHandler.processInput(button);
+      success = this.gridHelper.processInput(button);
     }
 
     if (success) {
@@ -265,16 +245,5 @@ export class EggSummaryUiHandler extends MessageUiHandler {
     }
 
     return success || error;
-  }
-
-  /**
-   * This method now delegates to the grid helper for cursor state.
-   * @param _cursor the cursor position (ignored - for compatibility only)
-   * @param _pageChange whether this is a page change
-   * @returns always true for compatibility
-   */
-  setCursor(_cursor: number, _pageChange?: boolean): boolean {
-    this.updateCursorPosition();
-    return true;
   }
 }
