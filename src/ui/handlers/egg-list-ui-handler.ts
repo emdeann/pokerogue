@@ -1,4 +1,5 @@
 import { globalScene } from "#app/global-scene";
+import type { Egg } from "#data/egg";
 import { Button } from "#enums/buttons";
 import { TextStyle } from "#enums/text-style";
 import { UiMode } from "#enums/ui-mode";
@@ -9,13 +10,11 @@ import { addTextObject } from "#ui/text";
 import { addWindow } from "#ui/ui-theme";
 import i18next from "i18next";
 
-export class EggListUiHandler extends MessageUiHandler {
-  private readonly ROWS = 9;
-  private readonly COLUMNS = 11;
+const ROWS = 9;
+const COLS = 11;
 
+export class EggListUiHandler extends MessageUiHandler {
   private eggListContainer: Phaser.GameObjects.Container;
-  private eggListIconContainer: Phaser.GameObjects.Container;
-  private eggIcons: Phaser.GameObjects.Sprite[];
   private eggSprite: Phaser.GameObjects.Sprite;
   private eggNameText: Phaser.GameObjects.Text;
   private eggDateText: Phaser.GameObjects.Text;
@@ -23,8 +22,8 @@ export class EggListUiHandler extends MessageUiHandler {
   private eggGachaInfoText: Phaser.GameObjects.Text;
   private eggListMessageBoxContainer: Phaser.GameObjects.Container;
 
-  private cursorObj: Phaser.GameObjects.Image;
-  private scrollGridHandler: ScrollableGridHelper;
+  private gridHelper: ScrollableGridHelper<Phaser.GameObjects.Sprite, Egg>;
+  private lastAnimatedIcon: Phaser.GameObjects.Sprite | null = null;
 
   private iconAnimHandler: PokemonIconAnimHelper;
 
@@ -41,33 +40,38 @@ export class EggListUiHandler extends MessageUiHandler {
     const bgColor = globalScene.add
       .rectangle(0, 0, globalScene.scaledCanvas.width, globalScene.scaledCanvas.height, 0x006860)
       .setOrigin(0);
-
     const eggListBg = globalScene.add.image(0, 0, "egg_list_bg").setOrigin(0);
 
     this.iconAnimHandler = new PokemonIconAnimHelper();
     this.iconAnimHandler.setup();
 
     this.eggNameText = addTextObject(8, 68, "", TextStyle.SUMMARY).setOrigin(0);
-
     this.eggDateText = addTextObject(8, 91, "", TextStyle.EGG_LIST);
-
     this.eggHatchWavesText = addTextObject(8, 108, "", TextStyle.EGG_LIST).setWordWrapWidth(540);
-
     this.eggGachaInfoText = addTextObject(8, 152, "", TextStyle.EGG_LIST).setWordWrapWidth(540);
-
-    this.eggListIconContainer = globalScene.add.container(113, 5);
-
-    this.cursorObj = globalScene.add.image(0, 0, "select_cursor").setOrigin(0);
 
     this.eggSprite = globalScene.add.sprite(54, 37, "egg");
 
-    this.scrollGridHandler = new ScrollableGridHelper(this.ROWS, this.COLUMNS, 310, 5, 4, 170)
-      .withCursorCallback(() => this.updateCursorPosition())
-      .withUpdateGridCallBack(() => this.updateEggIcons())
-      .withUpdateSingleElementCallback((i: number) => this.setEggDetails(i));
+    this.gridHelper = new ScrollableGridHelper<Phaser.GameObjects.Sprite, Egg>(0, 0, {
+      rows: ROWS,
+      columns: COLS,
+      scrollBar: { x: 310, y: 5, width: 4, height: 170 },
+      cells: {
+        x: 113,
+        y: 5,
+        spacingX: 18,
+        spacingY: 18,
+        createCell: () => globalScene.add.sprite(0, 0, "egg_icons").setScale(0.5).setOrigin(0),
+        renderCell: (cell, egg) => {
+          cell.setFrame(egg.getKey());
+          this.iconAnimHandler.addOrUpdate(cell, PokemonIconAnimMode.NONE);
+        },
+      },
+      cursor: { texture: "select_cursor", width: 18, height: 18 },
+      onItemSelected: (cell, egg) => this.onEggSelected(cell, egg),
+    });
 
     this.eggListMessageBoxContainer = globalScene.add.container(0, globalScene.scaledCanvas.height).setVisible(false);
-
     const eggListMessageBox = addWindow(1, -1, 318, 28).setOrigin(0, 1);
     this.eggListMessageBoxContainer.add(eggListMessageBox);
 
@@ -87,8 +91,7 @@ export class EggListUiHandler extends MessageUiHandler {
       this.eggDateText,
       this.eggHatchWavesText,
       this.eggGachaInfoText,
-      this.eggListIconContainer,
-      this.cursorObj,
+      this.gridHelper,
       this.eggSprite,
     ]);
   }
@@ -96,62 +99,31 @@ export class EggListUiHandler extends MessageUiHandler {
   override show(args: any[]): boolean {
     super.show(args);
 
-    this.initEggIcons();
-
     this.getUi().bringToTop(this.eggListContainer);
-
     this.eggListContainer.setVisible(true);
 
-    this.scrollGridHandler.setTotalElements(globalScene.gameData.eggs.length);
-
-    this.updateEggIcons();
-    this.updateCursorPosition();
+    this.gridHelper.setItems(globalScene.gameData.eggs);
 
     return true;
   }
 
   /**
-   * Create the grid of egg icons to display
+   * Grid callback for when the highlighted egg changes.
    */
-  private initEggIcons() {
-    this.eggIcons = [];
-    for (let i = 0; i < Math.min(this.ROWS * this.COLUMNS, globalScene.gameData.eggs.length); i++) {
-      const x = (i % this.COLUMNS) * 18;
-      const y = Math.floor(i / this.COLUMNS) * 18;
-      const icon = globalScene.add
-        .sprite(x - 2, y + 2, "egg_icons")
-        .setScale(0.5)
-        .setOrigin(0);
-      this.eggListIconContainer.add(icon);
-      this.eggIcons.push(icon);
+  private onEggSelected(cell: Phaser.GameObjects.Sprite, egg: Egg): void {
+    if (this.lastAnimatedIcon) {
+      this.iconAnimHandler.addOrUpdate(this.lastAnimatedIcon, PokemonIconAnimMode.NONE);
     }
+    this.iconAnimHandler.addOrUpdate(cell, PokemonIconAnimMode.ACTIVE);
+    this.lastAnimatedIcon = cell;
+
+    this.showEggDetails(egg);
   }
 
   /**
-   * Show the grid of egg icons
+   * Update the information panel for the given egg.
    */
-  private updateEggIcons() {
-    const indexOffset = this.scrollGridHandler.getItemOffset();
-    const eggsToShow = Math.min(this.eggIcons.length, globalScene.gameData.eggs.length - indexOffset);
-    this.eggIcons.forEach((icon, i) => {
-      if (i !== this.scrollGridHandler.getCursor()) {
-        this.iconAnimHandler.addOrUpdate(icon, PokemonIconAnimMode.NONE);
-      }
-      if (i < eggsToShow) {
-        const egg = globalScene.gameData.eggs[i + indexOffset];
-        icon.setFrame(egg.getKey()).setVisible(true);
-      } else {
-        icon.setVisible(false);
-      }
-    });
-  }
-
-  /**
-   * Update the information panel with the information of the given egg
-   * @param index which egg in the list to display the info for
-   */
-  private setEggDetails(index: number): void {
-    const egg = globalScene.gameData.eggs[index];
+  private showEggDetails(egg: Egg): void {
     this.eggSprite.setFrame(`egg_${egg.getKey()}`);
     this.eggNameText.setText(`${i18next.t("egg:egg")} (${egg.getEggDescriptor()})`);
     this.eggDateText.setText(
@@ -166,42 +138,15 @@ export class EggListUiHandler extends MessageUiHandler {
     this.eggGachaInfoText.setText(egg.getEggTypeDescriptor());
   }
 
-  /**
-   * Update the visual cursor position and details based on the helper's current cursor state
-   */
-  private updateCursorPosition(): void {
-    const cursor = this.scrollGridHandler.getCursor();
-
-    if (cursor === undefined || cursor < 0) {
-      return;
-    }
-
-    const lastCursor = this.cursor;
-    const changed = super.setCursor(cursor);
-
-    if (changed) {
-      const icon = this.eggIcons[cursor];
-      this.cursorObj.setPositionRelative(icon, 114, 5);
-
-      if (lastCursor > -1) {
-        this.iconAnimHandler.addOrUpdate(this.eggIcons[lastCursor], PokemonIconAnimMode.NONE);
-      }
-      this.iconAnimHandler.addOrUpdate(icon, PokemonIconAnimMode.ACTIVE);
-
-      this.setEggDetails(cursor + this.scrollGridHandler.getItemOffset());
-    }
-  }
-
   processInput(button: Button): boolean {
     const ui = this.getUi();
-
     let success = false;
 
     if (button === Button.CANCEL) {
       ui.revertMode();
       success = true;
     } else {
-      success = this.scrollGridHandler.processInput(button);
+      success = this.gridHelper.processInput(button);
     }
 
     if (success) {
@@ -211,24 +156,12 @@ export class EggListUiHandler extends MessageUiHandler {
     return success;
   }
 
-  /**
-   * This method now delegates to the grid helper for cursor state.
-   * @param _cursor the cursor position (ignored - for compatibility only)
-   * @param _pageChange whether this is a page change
-   * @returns always true for compatibility
-   */
-  setCursor(_cursor: number, _pageChange?: boolean): boolean {
-    this.updateCursorPosition();
-    return true;
-  }
-
   clear(): void {
     super.clear();
-    this.scrollGridHandler.reset();
+    this.gridHelper.reset();
     this.cursor = -1;
+    this.lastAnimatedIcon = null;
     this.eggListContainer.setVisible(false);
     this.iconAnimHandler.removeAll();
-    this.eggListIconContainer.removeAll(true);
-    this.eggIcons = [];
   }
 }
