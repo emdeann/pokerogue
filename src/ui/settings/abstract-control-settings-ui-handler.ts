@@ -38,6 +38,8 @@ export type ControlRow =
       locked: boolean;
     };
 
+type ActiveControlRow = Extract<ControlRow, { kind: "binding" | "value" }>;
+
 /** Cell capable of rendering any {@linkcode ControlRow}. */
 type ControlCell = BaseSettingsCell & {
   optionObjs: Phaser.GameObjects.Text[];
@@ -94,35 +96,46 @@ export abstract class AbstractControlSettingsUiHandler extends AbstractGridSetti
 
     const rows: ControlRow[] = [];
     for (const key of Object.keys(this.setting)) {
-      const settingName = this.setting[key];
-      if (!specificKeys.includes(settingName)) {
-        continue;
-      }
-
-      const i18nKey = toCamelCase(key.replace(/ALT(_| )/, ""));
-      const locked = this.settingBlacklisted.includes(settingName);
-      const isAlt = key.includes("ALT");
-      const label = i18next.t(`settings:${i18nKey}`) + (isAlt ? i18next.t("settings:alt") : "");
-      const options = this.settingDeviceOptions[settingName];
-
-      if (bindingSettings.includes(settingName)) {
-        rows.push({
-          kind: "binding",
-          label,
-          settingName,
-          padType: this.textureOverride ?? config.padType,
-          iconFrame: activeConfig.custom ? (getIconWithSettingName(activeConfig, settingName) ?? null) : null,
-          options,
-          locked,
-        });
-      } else {
-        const selected = stored.hasOwnProperty(settingName)
-          ? stored[settingName]
-          : this.settingDeviceDefaults[settingName];
-        rows.push({ kind: "value", label, settingName, options, selectedIndex: selected, locked });
+      const setting = this.getRowSetting(key, activeConfig, config, bindingSettings, specificKeys, stored);
+      if (setting != null) {
+        rows.push(setting);
       }
     }
     return rows;
+  }
+
+  private getRowSetting(
+    key: string,
+    activeConfig: InterfaceConfig,
+    config: any,
+    bindingSettings: string[],
+    specificKeys: string[],
+    stored: Record<string, number>,
+  ): ControlRow | undefined {
+    const settingName = this.setting[key];
+    if (!specificKeys.includes(settingName)) {
+      return;
+    }
+
+    const i18nKey = toCamelCase(key.replace(/ALT(_| )/, ""));
+    const locked = this.settingBlacklisted.includes(settingName);
+    const isAlt = key.includes("ALT");
+    const label = i18next.t(`settings:${i18nKey}`) + (isAlt ? i18next.t("settings:alt") : "");
+    const options = this.settingDeviceOptions[settingName];
+
+    if (bindingSettings.includes(settingName)) {
+      return {
+        kind: "binding",
+        label,
+        settingName,
+        padType: this.textureOverride ?? config.padType,
+        iconFrame: activeConfig.custom ? (getIconWithSettingName(activeConfig, settingName) ?? null) : null,
+        options,
+        locked,
+      };
+    }
+    const selected = Object.hasOwn(stored, settingName) ? stored[settingName] : this.settingDeviceDefaults[settingName];
+    return { kind: "value", label, settingName, options, selectedIndex: selected, locked };
   }
 
   protected getInitialRows(): ControlRow[] {
@@ -161,63 +174,74 @@ export abstract class AbstractControlSettingsUiHandler extends AbstractGridSetti
 
   protected renderRowCell(cell: ControlCell, row: ControlRow): void {
     if (row.kind === "placeholder") {
-      cell.labelObj.setText(row.label).setColor(getTextColor(TextStyle.SETTINGS_LABEL));
-      cell.iconObj.setVisible(false);
-      for (const opt of cell.optionObjs) {
-        opt.setVisible(false);
-      }
+      this.renderPlaceholderCell(cell, row);
       return;
     }
 
-    const labelStyle = row.locked ? TextStyle.SETTINGS_LOCKED : TextStyle.SETTINGS_LABEL;
-    cell.labelObj.setText(row.label).setColor(getTextColor(labelStyle)).setShadowColor(getTextColor(labelStyle, true));
+    // row is now ActiveControlRow — locked exists on both remaining members
+    this.applyLabelStyle(cell, row);
 
     if (row.kind === "binding") {
-      // Slot 0 = key icon, slots 1+ = prompt text (blank when locked), exactly
-      // as the original handler laid out optionValueLabels for binding rows.
-      cell.iconObj.setTexture(row.padType).setVisible(true);
-      if (row.iconFrame) {
-        cell.iconObj.setFrame(row.iconFrame).setAlpha(1);
-      } else {
-        cell.iconObj.setAlpha(0); // keeps the slot's footprint, hidden like the original
-      }
-
-      const numText = Math.max(row.options.length - 1, 0);
-      for (let o = 0; o < cell.optionObjs.length; o++) {
-        const opt = cell.optionObjs[o];
-        if (o < numText) {
-          opt
-            .setText(row.locked ? "" : row.options[o + 1])
-            .setVisible(true)
-            .setColor(getTextColor(TextStyle.WINDOW))
-            .setShadowColor(getTextColor(TextStyle.WINDOW, true));
-        } else {
-          opt.setVisible(false);
-        }
-      }
-
-      const slots: (Phaser.GameObjects.Sprite | Phaser.GameObjects.Text)[] = [cell.iconObj];
-      for (let o = 0; o < numText; o++) {
-        slots.push(cell.optionObjs[o]);
-      }
-
-      const totalWidth = slots.reduce((sum, go) => sum + go.width, 0);
-      const labelWidth = Math.max(130, cell.labelObj.displayWidth + 8);
-      const totalSpace = 297 - labelWidth - totalWidth / 6;
-      const optionSpacing = slots.length > 1 ? Math.floor(totalSpace / (slots.length - 1)) : 0;
-
-      let xOffset = 0;
-      for (const go of slots) {
-        go.setPositionRelative(cell.labelObj, labelWidth + xOffset, 0);
-        xOffset += go.width / 6 + optionSpacing;
-      }
-      return;
+      this.renderBindingCell(cell, row);
+    } else {
+      this.renderValueCell(cell, row);
     }
+  }
 
-    // value row
+  private renderPlaceholderCell(cell: ControlCell, row: ControlRow): void {
+    cell.labelObj.setText(row.label).setColor(getTextColor(TextStyle.SETTINGS_LABEL));
     cell.iconObj.setVisible(false);
+    for (const opt of cell.optionObjs) {
+      opt.setVisible(false);
+    }
+  }
 
+  private applyLabelStyle(cell: ControlCell, row: ActiveControlRow): void {
+    const style = row.locked ? TextStyle.SETTINGS_LOCKED : TextStyle.SETTINGS_LABEL;
+    cell.labelObj.setText(row.label).setColor(getTextColor(style)).setShadowColor(getTextColor(style, true));
+  }
+
+  private renderBindingCell(cell: ControlCell, row: Extract<ControlRow, { kind: "binding" }>): void {
+    this.applyBindingIcon(cell, row);
+    const numText = this.applyBindingOptions(cell, row);
+    const slots = [cell.iconObj, ...cell.optionObjs.slice(0, numText)];
+    this.layoutSlots(slots, cell.labelObj);
+  }
+
+  private applyBindingIcon(cell: ControlCell, row: Extract<ControlRow, { kind: "binding" }>): void {
+    cell.iconObj.setTexture(row.padType).setVisible(true);
+    if (row.iconFrame) {
+      cell.iconObj.setFrame(row.iconFrame).setAlpha(1);
+    } else {
+      cell.iconObj.setAlpha(0);
+    }
+  }
+
+  private applyBindingOptions(cell: ControlCell, row: Extract<ControlRow, { kind: "binding" }>): number {
+    const numText = Math.max(row.options.length - 1, 0);
+    for (let o = 0; o < cell.optionObjs.length; o++) {
+      const opt = cell.optionObjs[o];
+      if (o < numText) {
+        opt
+          .setText(row.locked ? "" : row.options[o + 1])
+          .setVisible(true)
+          .setColor(getTextColor(TextStyle.WINDOW))
+          .setShadowColor(getTextColor(TextStyle.WINDOW, true));
+      } else {
+        opt.setVisible(false);
+      }
+    }
+    return numText;
+  }
+
+  private renderValueCell(cell: ControlCell, row: Extract<ControlRow, { kind: "value" }>): void {
+    cell.iconObj.setVisible(false);
     const numOptions = row.options.length;
+    this.applyValueOptions(cell, row, numOptions);
+    this.layoutSlots(cell.optionObjs.slice(0, numOptions), cell.labelObj);
+  }
+
+  private applyValueOptions(cell: ControlCell, row: Extract<ControlRow, { kind: "value" }>, numOptions: number): void {
     for (let o = 0; o < cell.optionObjs.length; o++) {
       const opt = cell.optionObjs[o];
       if (o < numOptions) {
@@ -231,16 +255,21 @@ export abstract class AbstractControlSettingsUiHandler extends AbstractGridSetti
         opt.setVisible(false);
       }
     }
+  }
 
-    const totalWidth = row.options.reduce((sum, _o, o) => sum + cell.optionObjs[o].width, 0);
-    const labelWidth = Math.max(130, cell.labelObj.displayWidth + 8);
+  private layoutSlots(
+    slots: (Phaser.GameObjects.Sprite | Phaser.GameObjects.Text)[],
+    labelObj: Phaser.GameObjects.Text,
+  ): void {
+    const totalWidth = slots.reduce((sum, go) => sum + go.width, 0);
+    const labelWidth = Math.max(130, labelObj.displayWidth + 8);
     const totalSpace = 297 - labelWidth - totalWidth / 6;
-    const optionSpacing = numOptions > 1 ? Math.floor(totalSpace / (numOptions - 1)) : 0;
+    const optionSpacing = slots.length > 1 ? Math.floor(totalSpace / (slots.length - 1)) : 0;
 
     let xOffset = 0;
-    for (let o = 0; o < numOptions; o++) {
-      cell.optionObjs[o].setPositionRelative(cell.labelObj, labelWidth + xOffset, 0);
-      xOffset += cell.optionObjs[o].width / 6 + optionSpacing;
+    for (const go of slots) {
+      go.setPositionRelative(labelObj, labelWidth + xOffset, 0);
+      xOffset += go.width / 6 + optionSpacing;
     }
   }
 
