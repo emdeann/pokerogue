@@ -216,7 +216,7 @@ export class InputsController {
       this.selectedDevice[Device.GAMEPAD] = gamepadName.toLowerCase();
     }
     const handler = globalScene.ui?.handlers[UiMode.SETTINGS_GAMEPAD] as SettingsGamepadUiHandler;
-    handler?.updateChosenGamepadDisplay();
+    handler?.updateBindings();
   }
 
   /**
@@ -274,7 +274,7 @@ export class InputsController {
     }
     this.lastSource = "gamepad";
     const handler = globalScene.ui?.handlers[UiMode.SETTINGS_GAMEPAD] as SettingsGamepadUiHandler;
-    handler?.updateChosenGamepadDisplay();
+    handler?.updateBindings();
   }
 
   /**

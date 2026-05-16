@@ -1,6 +1,5 @@
 import { globalScene } from "#app/global-scene";
 import { Device } from "#enums/devices";
-import { TextStyle } from "#enums/text-style";
 import type { UiMode } from "#enums/ui-mode";
 import { PAD_DUALSHOCK } from "#inputs/pad-dualshock";
 import { PAD_UNLICENSED_SNES } from "#inputs/pad-unlicensed-snes";
@@ -13,22 +12,18 @@ import {
   settingGamepadOptions,
 } from "#system/settings-gamepad";
 import type { InterfaceConfig } from "#types/configs/inputs";
+import type { ControlRow } from "#ui/abstract-control-settings-ui-handler";
 import { AbstractControlSettingsUiHandler } from "#ui/abstract-control-settings-ui-handler";
-import { addTextObject } from "#ui/text";
 import { truncateString } from "#utils/common";
 import i18next from "i18next";
 
-/** Class representing the settings UI handler for gamepads */
-
+/** Class representing the settings UI handler for gamepads. */
 export class SettingsGamepadUiHandler extends AbstractControlSettingsUiHandler {
-  /**
-   * Creates an instance of SettingsGamepadUiHandler.
-   *
-   * @param mode - The UI mode, optional.
-   */
+  setSetting = setSettingGamepad;
+
   constructor(mode: UiMode | null = null) {
     super(mode);
-    this.titleSelected = "Gamepad";
+    this.title = "Gamepad";
     this.setting = SettingGamepad;
     this.settingDeviceDefaults = settingGamepadDefaults;
     this.settingDeviceOptions = settingGamepadOptions;
@@ -39,83 +34,35 @@ export class SettingsGamepadUiHandler extends AbstractControlSettingsUiHandler {
     this.device = Device.GAMEPAD;
   }
 
-  setSetting = setSettingGamepad;
-
-  /**
-   * Setup UI elements.
-   */
-  setup() {
-    super.setup();
-    // If no gamepads are detected, set up a default UI prompt in the settings container.
-    this.layout["noGamepads"] = new Map();
-    const optionsContainer = globalScene.add.container(0, 0);
-    optionsContainer.setVisible(false); // Initially hide the container as no gamepads are connected.
-    const label = addTextObject(8, 28, i18next.t("settings:gamepadPleasePlug"), TextStyle.SETTINGS_LABEL);
-    label.setOrigin(0, 0);
-    optionsContainer.add(label);
-    this.settingsContainer.add(optionsContainer);
-
-    // Map the 'noGamepads' layout options for easy access.
-    this.layout["noGamepads"].optionsContainer = optionsContainer;
-    this.layout["noGamepads"].label = label;
+  /** Row shown when no gamepad is connected. */
+  protected override getPlaceholderRows(): ControlRow[] {
+    return [{ kind: "placeholder", label: i18next.t("settings:gamepadPleasePlug") }];
   }
 
   /**
-   * Set the layout for the active configuration.
-   *
-   * @param activeConfig - The active gamepad configuration.
-   * @returns `true` if the layout was successfully applied, otherwise `false`.
+   * Build the rows for the active pad, then substitute the connected device's
+   * name into the "Controller" row's first option label.
    */
-  setLayout(activeConfig: InterfaceConfig): boolean {
-    // Check if there is no active configuration (e.g., no gamepad connected).
-    if (!activeConfig) {
-      // Retrieve the layout for when no gamepads are connected.
-      const layout = this.layout["noGamepads"];
-      // Make the options container visible to show message.
-      layout.optionsContainer.setVisible(true);
-      // Return false indicating the layout application was not successful due to lack of gamepad.
-      return false;
-    }
+  protected override computeRowsForActiveConfig(activeConfig: InterfaceConfig | null): ControlRow[] {
+    const rows = super.computeRowsForActiveConfig(activeConfig);
 
-    return super.setLayout(activeConfig);
-  }
-
-  /**
-   * Update the display of the chosen gamepad.
-   */
-  updateChosenGamepadDisplay(): void {
-    // Update any bindings that might have changed since the last update.
-    this.updateBindings();
-    this.resetScroll();
-
-    // Iterate over the keys in the settingDevice enumeration.
-    for (const [index, key] of Object.keys(this.setting).entries()) {
-      const setting = this.setting[key]; // Get the actual setting value using the key.
-
-      // Check if the current setting corresponds to the controller setting.
-      if (setting === this.setting.Controller) {
-        // Iterate over all layouts excluding the 'noGamepads' special case.
-        for (const _key of Object.keys(this.layout)) {
-          if (_key === "noGamepads") {
-            continue;
-          } // Skip updating the no gamepad layout.
-
-          // Update the text of the first option label under the current setting to the name of the chosen gamepad,
-          // truncating the name to 30 characters if necessary.
-          this.layout[_key].optionValueLabels[index][0].setText(
-            // TODO: is this bang correct?
-            truncateString(globalScene.inputController.selectedDevice[Device.GAMEPAD]!, 20),
-          );
+    const deviceName = globalScene.inputController.selectedDevice[Device.GAMEPAD];
+    if (deviceName) {
+      for (const row of rows) {
+        if (row.kind === "value" && row.settingName === this.setting.Controller) {
+          const options = row.options.slice();
+          options[0] = truncateString(deviceName, 20);
+          row.options = options;
         }
       }
     }
+
+    return rows;
   }
 
   /**
-   * Save the setting to local storage.
-   *
-   * @param settingName - The setting to save.
-   * @param cursor - The cursor position to save.
+   * Save the setting to local storage. The "Controller" pseudo-setting only
+   * reflects the connected device and is never persisted.
    */
   saveSettingToLocalStorage(settingName, cursor): void {
     if (this.setting[settingName] !== this.setting.Controller) {
