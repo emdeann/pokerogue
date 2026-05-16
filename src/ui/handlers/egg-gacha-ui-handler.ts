@@ -10,12 +10,21 @@ import { TextStyle } from "#enums/text-style";
 import { UiMode } from "#enums/ui-mode";
 import { getVoucherTypeIcon, VoucherType } from "#system/voucher";
 import { MessageUiHandler } from "#ui/message-ui-handler";
+import { ScrollableListHelper } from "#ui/scrollable-list-helper";
 import { addTextObject, getEggTierTextTint, getTextStyleOptions } from "#ui/text";
 import { addWindow } from "#ui/ui-theme";
 import { fixedInt, randSeedShuffle } from "#utils/common";
 import { getEnumValues } from "#utils/enums";
 import { getPokemonSpecies } from "#utils/pokemon-utils";
 import i18next from "i18next";
+
+interface GachaPullItem {
+  label: string;
+  iconFrame: string | null;
+  voucherType: VoucherType | null;
+  vouchersConsumed: number;
+  pulls: number;
+}
 
 export class EggGachaUiHandler extends MessageUiHandler {
   private eggGachaContainer: Phaser.GameObjects.Container;
@@ -34,7 +43,8 @@ export class EggGachaUiHandler extends MessageUiHandler {
 
   private gachaCursor: number;
 
-  private cursorObj: Phaser.GameObjects.Image;
+  private listHelper: ScrollableListHelper<GachaPullItem> | null = null;
+  private gachaPullItems: GachaPullItem[] = [];
   private transitioning: boolean;
   private transitionCancelled: boolean;
   private summaryFinished: boolean;
@@ -167,6 +177,99 @@ export class EggGachaUiHandler extends MessageUiHandler {
     }
   }
 
+  private buildGachaPullItems(): GachaPullItem[] {
+    const resolvedLanguage = i18next.resolvedLanguage ?? "en";
+    const isCompactLang = ["zh", "ko"].includes(resolvedLanguage.substring(0, 2));
+
+    const formatLabel = (multiplier: string, description: string): string => {
+      const desc = description.split(" ");
+      if (desc[0].length < 2) {
+        desc[0] += isCompactLang ? " " : "  ";
+      }
+      if (multiplier === "x1") {
+        desc[0] += " ";
+      }
+      return `${multiplier.padEnd(5)}${desc.join(" ")}`;
+    };
+
+    return [
+      {
+        label: formatLabel("x1", `1 ${i18next.t("egg:pull")}`),
+        iconFrame: getVoucherTypeIcon(VoucherType.REGULAR),
+        voucherType: VoucherType.REGULAR,
+        vouchersConsumed: 1,
+        pulls: 1,
+      },
+      {
+        label: formatLabel("x10", `10 ${i18next.t("egg:pulls")}`),
+        iconFrame: getVoucherTypeIcon(VoucherType.REGULAR),
+        voucherType: VoucherType.REGULAR,
+        vouchersConsumed: 10,
+        pulls: 10,
+      },
+      {
+        label: formatLabel("x1", `5 ${i18next.t("egg:pulls")}`),
+        iconFrame: getVoucherTypeIcon(VoucherType.PLUS),
+        voucherType: VoucherType.PLUS,
+        vouchersConsumed: 1,
+        pulls: 5,
+      },
+      {
+        label: formatLabel("x1", `10 ${i18next.t("egg:pulls")}`),
+        iconFrame: getVoucherTypeIcon(VoucherType.PREMIUM),
+        voucherType: VoucherType.PREMIUM,
+        vouchersConsumed: 1,
+        pulls: 10,
+      },
+      {
+        label: formatLabel("x1", `25 ${i18next.t("egg:pulls")}`),
+        iconFrame: getVoucherTypeIcon(VoucherType.GOLDEN),
+        voucherType: VoucherType.GOLDEN,
+        vouchersConsumed: 1,
+        pulls: 25,
+      },
+      {
+        label: i18next.t("menu:cancel"),
+        iconFrame: null,
+        voucherType: null,
+        vouchersConsumed: 0,
+        pulls: 0,
+      },
+    ];
+  }
+
+  private handlePullItemAction(item: GachaPullItem): void {
+    const ui = this.getUi();
+
+    if (item.voucherType === null) {
+      ui.revertMode();
+      ui.playSelect();
+      return;
+    }
+
+    let errorKey: string | undefined;
+    const freePulls = Overrides.EGG_FREE_GACHA_PULLS_OVERRIDE;
+
+    if (!freePulls && globalScene.gameData.eggs.length + item.pulls > 99) {
+      errorKey = "egg:tooManyEggs";
+    } else if (!freePulls && globalScene.gameData.voucherCounts[item.voucherType] < item.vouchersConsumed) {
+      errorKey = "egg:notEnoughVouchers";
+    }
+
+    if (errorKey) {
+      this.showError(i18next.t(errorKey));
+      ui.playError();
+      return;
+    }
+
+    if (!freePulls) {
+      this.consumeVouchers(item.voucherType, item.vouchersConsumed);
+    }
+
+    ui.playSelect();
+    void this.pull(item.pulls);
+  }
+
   setup() {
     this.gachaCursor = 0;
     this.scale = getTextStyleOptions(TextStyle.WINDOW).scale;
@@ -214,66 +317,42 @@ export class EggGachaUiHandler extends MessageUiHandler {
     this.eggGachaOptionsContainer = globalScene.add
       .container(globalScene.scaledCanvas.width, 148)
       .add(this.eggGachaOptionSelectBg);
-    this.eggGachaContainer.add(this.eggGachaOptionsContainer);
 
-    const multiplierOne = "x1";
-    const multiplierTen = "x10";
-    const pullOptions = [
-      {
-        multiplier: multiplierOne,
-        description: `1 ${i18next.t("egg:pull")}`,
-        icon: getVoucherTypeIcon(VoucherType.REGULAR),
-      },
-      {
-        multiplier: multiplierTen,
-        description: `10 ${i18next.t("egg:pulls")}`,
-        icon: getVoucherTypeIcon(VoucherType.REGULAR),
-      },
-      {
-        multiplier: multiplierOne,
-        description: `5 ${i18next.t("egg:pulls")}`,
-        icon: getVoucherTypeIcon(VoucherType.PLUS),
-      },
-      {
-        multiplier: multiplierOne,
-        description: `10 ${i18next.t("egg:pulls")}`,
-        icon: getVoucherTypeIcon(VoucherType.PREMIUM),
-      },
-      {
-        multiplier: multiplierOne,
-        description: `25 ${i18next.t("egg:pulls")}`,
-        icon: getVoucherTypeIcon(VoucherType.GOLDEN),
-      },
-    ];
+    this.gachaPullItems = this.buildGachaPullItems();
 
-    const resolvedLanguage = i18next.resolvedLanguage ?? "en";
-    const pullOptionsText = pullOptions
-      .map(option => {
-        const desc = option.description.split(" ");
-        if (desc[0].length < 2) {
-          desc[0] += ["zh", "ko"].includes(resolvedLanguage.substring(0, 2)) ? " " : "  ";
-        }
-        if (option.multiplier === multiplierOne) {
-          desc[0] += " ";
-        }
-        return `     ${option.multiplier.padEnd(5)}${desc.join(" ")}`;
-      })
-      .join("\n");
+    const iconScale = 3 * this.scale;
+    const itemsX = this.eggGachaOptionSelectBg.x - this.eggGachaOptionSelectBg.width + 12 + 24 * this.scale;
+    const itemsY = this.eggGachaOptionSelectBg.y - this.eggGachaOptionSelectBg.height + 2 + 42 * this.scale;
+    const itemsWidth = this.eggGachaOptionSelectBg.width - 24;
 
-    const optionText = addTextObject(0, 0, `${pullOptionsText}\n${i18next.t("menu:cancel")}`, TextStyle.WINDOW)
-      .setLineSpacing(28)
-      .setFontSize("80px")
-      .setPositionRelative(this.eggGachaOptionSelectBg, 16, 9);
-
-    this.eggGachaOptionsContainer.add(optionText);
-
-    pullOptions.forEach((option, i) => {
-      const icon = globalScene.add
-        .sprite(0, 0, "items", option.icon)
-        .setScale(3 * this.scale)
-        .setPositionRelative(this.eggGachaOptionSelectBg, 20, 9 + (48 + i * 96) * this.scale);
-      this.eggGachaOptionsContainer.add(icon);
+    this.listHelper = new ScrollableListHelper<GachaPullItem>(0, 0, {
+      rows: this.gachaPullItems.length,
+      items: { x: itemsX, y: itemsY, rowSpacing: 96 * this.scale, width: itemsWidth },
+      scrollMode: "arrows",
+      arrowStyle: TextStyle.WINDOW,
+      cursor: {
+        texture: "cursor",
+        width: 6,
+        height: 10,
+        offsetX: -42 * this.scale,
+        offsetY: 18 * this.scale,
+      },
+      textOptions: { maxLines: 1 },
+      getLabel: item => item.label,
+      icon: {
+        texture: "items",
+        x: 36 * this.scale,
+        y: 7,
+        scale: iconScale,
+        getFrame: item => item.iconFrame,
+      },
+      onItemSelected: item => {
+        this.cursor = this.gachaPullItems.indexOf(item);
+      },
+      onItemActioned: item => this.handlePullItemAction(item),
     });
+    this.eggGachaOptionsContainer.add(this.listHelper);
+    this.listHelper.setItems(this.gachaPullItems);
 
     this.eggGachaContainer.add(this.eggGachaOptionsContainer);
 
@@ -322,8 +401,6 @@ export class EggGachaUiHandler extends MessageUiHandler {
     this.eggGachaContainer.add(gachaMessageBoxContainer);
 
     this.initPromptSprite(gachaMessageBoxContainer);
-
-    this.setCursor(0);
   }
 
   show(args: any[]): boolean {
@@ -696,178 +773,89 @@ export class EggGachaUiHandler extends MessageUiHandler {
   }
 
   /**
-   * Convert a cursor index to a voucher type and count
-   * @param cursor - The cursor index corresponding to the voucher type
-   * @returns The voucher type, vouchers used, and pulls given, or an empty array if the cursor is not on a voucher
-   */
-  private static cursorToVoucher(cursor: number): [VoucherType, number, number] | undefined {
-    switch (cursor) {
-      case 0:
-        return [VoucherType.REGULAR, 1, 1];
-      case 1:
-        return [VoucherType.REGULAR, 10, 10];
-      case 2:
-        return [VoucherType.PLUS, 1, 5];
-      case 3:
-        return [VoucherType.PREMIUM, 1, 10];
-      case 4:
-        return [VoucherType.GOLDEN, 1, 25];
-    }
-  }
-
-  /**
-   * Process an action input received during voucher selection.
-   *
-   * @remarks
-   *
-   * Handles playing the error sound and showing the error message, but does not handle playing the success sound.
-   *
-   * @param cursor - The index of the voucher menu option
-   * @returns True if the success sound should be played, false if the error sound should be played, or undefined if the cursor is out of range.
-   */
-  private handleVoucherSelectAction(cursor: number): boolean | undefined {
-    // Cursors that are out of range should not be processed
-    if (cursor < 0 || cursor > 5) {
-      return;
-    }
-    const ui = this.getUi();
-    const voucher = EggGachaUiHandler.cursorToVoucher(cursor);
-    if (!voucher) {
-      ui.revertMode();
-      return true;
-    }
-    const [voucherType, vouchersConsumed, pulls] = voucher;
-
-    let errorKey: string | undefined;
-    const freePulls = Overrides.EGG_FREE_GACHA_PULLS_OVERRIDE;
-
-    if (!freePulls && globalScene.gameData.eggs.length + pulls > 99) {
-      errorKey = "egg:tooManyEggs";
-    } else if (!freePulls && globalScene.gameData.voucherCounts[voucherType] < vouchersConsumed) {
-      errorKey = "egg:notEnoughVouchers";
-    }
-
-    if (errorKey) {
-      this.showError(i18next.t(errorKey));
-      return false;
-    }
-
-    if (!freePulls) {
-      this.consumeVouchers(voucherType, vouchersConsumed);
-    }
-
-    // TODO: Remove this dangling proimse if necessary when the UI's input event handling supports async functions
-    void this.pull(pulls);
-    return true;
-  }
-
-  /**
    * Process an input received while the egg gacha UI is transitioning
    *
    * @param button - The button that was pressed
-   * @returns - `true` if the success sound should be played, otherwise `undefined`
+   * @returns `true` if the input was consumed
    */
-  private processTransitionInput(button: Button): true | undefined {
+  private processTransitionInput(button: Button): boolean {
     if (!this.transitionCancelled && (button === Button.ACTION || button === Button.CANCEL)) {
       this.transitionCancelled = true;
-      // When transition is cancelled, ensure the active chain playing the egg drop animation is sped up
-      // We cannot cancel it, as this would leave sprite positions at their current position in the animation
       this.eggDropTweenChain?.setTimeScale(50);
+      this.getUi().playSelect();
       return true;
     }
+    return false;
   }
 
   /**
-   * Process an input received in the normal mode of the egg gacha UI (not transitoning, not summary)
+   * Process an input received in the normal mode of the egg gacha UI (not transitioning, not summary)
    * @param button - The button that was pressed
-   * @returns `true` if the success sound should be played, `false` if the error sound should be played, or `undefined` no input event occurred.
+   * @returns `true` if the input was consumed
    */
-  private processNormalInput(button: Button): boolean | undefined {
+  private processNormalInput(button: Button): boolean {
     const ui = this.getUi();
-    let success: boolean | undefined;
-    switch (button) {
-      case Button.ACTION:
-        return this.handleVoucherSelectAction(this.cursor);
-      case Button.CANCEL:
-        ui.revertMode();
-        success = true;
-        break;
-      case Button.UP:
-        if (this.cursor) {
-          success = this.setCursor(this.cursor - 1);
-        }
-        break;
-      case Button.DOWN:
-        if (this.cursor < 5) {
-          success = this.setCursor(this.cursor + 1);
-        }
-        break;
-      case Button.LEFT:
-        if (this.gachaCursor) {
-          success = this.setGachaCursor(this.gachaCursor - 1);
-        }
-        break;
-      case Button.RIGHT:
-        if (this.gachaCursor < Object.keys(GachaType).length - 1) {
-          success = this.setGachaCursor(this.gachaCursor + 1);
-        }
-        break;
+
+    if (button === Button.CANCEL) {
+      ui.revertMode();
+      ui.playSelect();
+      return true;
     }
 
-    // Return undefined here because we do not play error sound in case of failed directional movements
-    return success || undefined;
+    if (button === Button.ACTION) {
+      return this.listHelper?.processInput(button) ?? false;
+    }
+
+    if (button === Button.UP || button === Button.DOWN) {
+      const success = this.listHelper?.processInput(button) ?? false;
+      if (success) {
+        ui.playSelect();
+      }
+      return success;
+    }
+
+    let success = false;
+    if (button === Button.LEFT) {
+      if (this.gachaCursor) {
+        success = this.setGachaCursor(this.gachaCursor - 1);
+      }
+    } else if (button === Button.RIGHT && this.gachaCursor < Object.keys(GachaType).length - 1) {
+      success = this.setGachaCursor(this.gachaCursor + 1);
+    }
+
+    if (success) {
+      ui.playSelect();
+    }
+    return success;
   }
 
   /**
    * Handles an input event that occurs while the egg gacha summary is visible
    * @param button - The button that was pressed
-   * @returns `true` if an input event occurred and the select sound should be played, otherwise `undefined`
+   * @returns `true` if the input was consumed
    */
-  private processSummaryInput(button: Button): true | undefined {
+  private processSummaryInput(button: Button): boolean {
     if (this.summaryFinished && (button === Button.ACTION || button === Button.CANCEL)) {
       this.hideSummary();
+      this.getUi().playSelect();
       return true;
     }
+    return false;
   }
 
   /**
    *
    * @param button - The button that was pressed
-   * @returns - Whether an input event occured.
+   * @returns - Whether an input event occurred.
    */
   processInput(button: Button): boolean {
-    let success: boolean | undefined;
     if (this.transitioning) {
-      success = this.processTransitionInput(button);
-    } else if (this.eggGachaSummaryContainer.visible) {
-      success = this.processSummaryInput(button);
-    } else {
-      success = this.processNormalInput(button);
+      return this.processTransitionInput(button);
     }
-
-    if (success === undefined) {
-      return false;
+    if (this.eggGachaSummaryContainer.visible) {
+      return this.processSummaryInput(button);
     }
-    if (success) {
-      this.getUi().playSelect();
-    } else {
-      this.getUi().playError();
-    }
-    return true;
-  }
-
-  setCursor(cursor: number): boolean {
-    const ret = super.setCursor(cursor);
-
-    if (!this.cursorObj) {
-      this.cursorObj = globalScene.add.image(0, 0, "cursor");
-      this.eggGachaOptionsContainer.add(this.cursorObj);
-    }
-
-    this.cursorObj.setScale(this.scale * 6);
-    this.cursorObj.setPositionRelative(this.eggGachaOptionSelectBg, 10, 9 + (48 + this.cursor * 96) * this.scale);
-
-    return ret;
+    return this.processNormalInput(button);
   }
 
   setGachaCursor(cursor: number): boolean {
@@ -925,5 +913,10 @@ export class EggGachaUiHandler extends MessageUiHandler {
       this.playTimeTimer = null;
     }
     this.eggGachaContainer.setActive(false);
+    this.listHelper?.reset();
+  }
+
+  protected override applyInputState(): void {
+    this.listHelper?.setTouchEnabled(this.hasInputOwnership());
   }
 }
