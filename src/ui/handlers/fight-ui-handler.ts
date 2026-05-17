@@ -24,6 +24,22 @@ interface MoveWithUser {
   readonly user: Pokemon;
 }
 
+const NORMAL_CURSOR = {
+  texture: "cursor",
+  width: 6,
+  height: 10,
+  offsetX: -8,
+  offsetY: 2.5,
+} as const;
+
+const TERA_CURSOR = {
+  texture: "cursor_tera",
+  width: 9,
+  height: 11,
+  offsetX: -11,
+  offsetY: 2.5,
+};
+
 export class FightUiHandler extends UiHandler implements InfoToggle {
   public static readonly MOVES_CONTAINER_NAME = "moves";
 
@@ -77,13 +93,7 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
           container.add(moveText);
         },
       },
-      cursor: {
-        texture: "cursor",
-        width: 6,
-        height: 10,
-        offsetX: -8,
-        offsetY: 2.5,
-      },
+      cursor: NORMAL_CURSOR,
       onItemSelected: (_cell, moveWithUser) => this.onMoveSelect(moveWithUser.move),
       onItemActioned: () => this.processActionInput(),
       wrap: false,
@@ -156,13 +166,14 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
     globalScene.addInfoToggle(this.moveInfoOverlay, this);
   }
 
-  override show(args: [number?, Command?]): boolean {
+  public override show(args: [number?, Command?]): boolean {
     super.show(args);
     const pokemon = (globalScene.phaseManager.getCurrentPhase() as CommandPhase).getPokemon();
     const moveset = pokemon.getMoveset();
 
     this.fieldIndex = args[0] ?? 0;
     this.fromCommand = args[1] ?? Command.FIGHT;
+    this.gridHelper.updateCursorConfig(this.fromCommand === Command.TERA ? TERA_CURSOR : NORMAL_CURSOR);
 
     const messageHandler = this.getUi().getMessageHandler();
     messageHandler.bg.setVisible(false);
