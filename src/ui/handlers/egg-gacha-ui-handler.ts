@@ -32,14 +32,14 @@ export class EggGachaUiHandler extends MessageUiHandler {
   private eggGachaOptionsContainer: Phaser.GameObjects.Container;
   private eggGachaOptionSelectBg: Phaser.GameObjects.NineSlice;
 
-  private gachaContainers: Phaser.GameObjects.Container[];
-  private gachaKnobs: Phaser.GameObjects.Sprite[];
-  private gachaHatches: Phaser.GameObjects.Sprite[];
-  private gachaInfoContainers: Phaser.GameObjects.Container[];
+  private readonly gachaContainers: Phaser.GameObjects.Container[];
+  private readonly gachaKnobs: Phaser.GameObjects.Sprite[];
+  private readonly gachaHatches: Phaser.GameObjects.Sprite[];
+  private readonly gachaInfoContainers: Phaser.GameObjects.Container[];
   private eggGachaOverlay: Phaser.GameObjects.Rectangle;
   private eggGachaSummaryContainer: Phaser.GameObjects.Container;
 
-  private voucherCountLabels: Phaser.GameObjects.Text[];
+  private readonly voucherCountLabels: Phaser.GameObjects.Text[];
 
   private gachaCursor: number;
 
@@ -48,14 +48,14 @@ export class EggGachaUiHandler extends MessageUiHandler {
   private transitioning: boolean;
   private transitionCancelled: boolean;
   private summaryFinished: boolean;
-  private defaultText: string;
+  private readonly defaultText: string;
 
   /** The tween chain playing the egg drop animation sequence */
   private eggDropTweenChain?: Phaser.Tweens.TweenChain | undefined;
 
   private scale = 0.1666666667;
 
-  private legendaryExpiration = addTextObject(0, 0, "", TextStyle.WINDOW_ALT);
+  private readonly legendaryExpiration = addTextObject(0, 0, "", TextStyle.WINDOW_ALT);
   private playTimeTimer: Phaser.Time.TimerEvent | null;
 
   constructor() {
@@ -267,7 +267,7 @@ export class EggGachaUiHandler extends MessageUiHandler {
     }
 
     ui.playSelect();
-    void this.pull(item.pulls);
+    this.pull(item.pulls);
   }
 
   setup() {
@@ -320,30 +320,33 @@ export class EggGachaUiHandler extends MessageUiHandler {
 
     this.gachaPullItems = this.buildGachaPullItems();
 
-    const iconScale = 3 * this.scale;
-    const itemsX = this.eggGachaOptionSelectBg.x - this.eggGachaOptionSelectBg.width + 12 + 24 * this.scale;
-    const itemsY = this.eggGachaOptionSelectBg.y - this.eggGachaOptionSelectBg.height + 2 + 42 * this.scale;
-    const itemsWidth = this.eggGachaOptionSelectBg.width - 24;
+    const bgWidth = this.eggGachaOptionSelectBg.width;
+    const bgHeight = this.eggGachaOptionSelectBg.height;
 
     this.listHelper = new ScrollableListHelper<GachaPullItem>(0, 0, {
       rows: this.gachaPullItems.length,
-      items: { x: itemsX, y: itemsY, rowSpacing: 96 * this.scale, width: itemsWidth },
+      items: {
+        x: -bgWidth + 16,
+        y: -bgHeight + 9,
+        rowSpacing: 98 * this.scale,
+        width: bgWidth - 20,
+      },
       scrollMode: "arrows",
       arrowStyle: TextStyle.WINDOW,
       cursor: {
         texture: "cursor",
         width: 6,
         height: 10,
-        offsetX: -42 * this.scale,
+        offsetX: -54 * this.scale,
         offsetY: 18 * this.scale,
       },
-      textOptions: { maxLines: 1 },
-      getLabel: item => item.label,
+      textOptions: { lineSpacing: 28, fontSize: "80px", maxLines: 1 },
+      getLabel: item => (item.iconFrame ? `     ${item.label}` : item.label),
       icon: {
         texture: "items",
-        x: 36 * this.scale,
-        y: 7,
-        scale: iconScale,
+        x: 4,
+        y: 48 * this.scale,
+        scale: 3 * this.scale,
         getFrame: item => item.iconFrame,
       },
       onItemSelected: item => {
@@ -359,8 +362,8 @@ export class EggGachaUiHandler extends MessageUiHandler {
     for (const voucher of getEnumValues(VoucherType)) {
       const container = globalScene.add.container(globalScene.scaledCanvas.width - 56 * voucher, 0);
 
-      const bg = addWindow(0, 0, 56, 22).setOrigin(1, 0);
-      container.add(bg);
+      const voucherBg = addWindow(0, 0, 56, 22).setOrigin(1, 0);
+      container.add(voucherBg);
 
       const countLabel = addTextObject(-48, 3, "0", TextStyle.WINDOW).setOrigin(0);
       container.add(countLabel);
@@ -553,7 +556,7 @@ export class EggGachaUiHandler extends MessageUiHandler {
       // if not, override the egg tier
       if (i === pullCount) {
         const guaranteedEggTier = this.getGuaranteedEggTierFromPullCount(pullCount);
-        if (guaranteedEggTier !== EggTier.COMMON && !eggs.some(egg => egg.tier >= guaranteedEggTier)) {
+        if (guaranteedEggTier !== EggTier.COMMON && !eggs.some(e => e.tier >= guaranteedEggTier)) {
           eggOptions.tier = guaranteedEggTier;
         }
       }
@@ -602,7 +605,6 @@ export class EggGachaUiHandler extends MessageUiHandler {
       }
       const eggSprite = globalScene.add.sprite(127, 75, "egg", `egg_${eggs[i].getKey()}`).setScale(0.5);
       gachaContainer.addAt(eggSprite, 2);
-      // biome-ignore lint/performance/noAwaitInLoops: The point of this loop is to play the animations, one after another
       await this.doPullAnim(eggSprite, i).finally(() => gachaContainer.remove(eggSprite, true));
     }
 
