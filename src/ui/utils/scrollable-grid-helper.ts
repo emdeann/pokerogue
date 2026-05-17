@@ -4,6 +4,15 @@ import { TextStyle } from "#enums/text-style";
 import { ScrollBar } from "#ui/scroll-bar";
 import { addTextObject } from "#ui/text";
 
+interface CursorConfig {
+  texture: string;
+  width: number;
+  height: number;
+  /** Pixel offset from the cell's top-left where the cursor is drawn */
+  offsetX?: number;
+  offsetY?: number;
+}
+
 export interface ScrollableGridConfig<TCell extends Phaser.GameObjects.Container, TData> {
   /** Maximum number of rows shown at once */
   rows: number;
@@ -30,16 +39,7 @@ export interface ScrollableGridConfig<TCell extends Phaser.GameObjects.Container
   };
 
   /** Selection cursor configuration. Defaults to `select_cursor_highlight` at 16×16. */
-  cursor?:
-    | {
-        texture: string;
-        width: number;
-        height: number;
-        /** Pixel offset from the cell's top-left where the cursor is drawn */
-        offsetX?: number;
-        offsetY?: number;
-      }
-    | undefined;
+  cursor?: CursorConfig | undefined;
 
   /**
    * Called whenever the highlighted item changes (cursor move, scroll, hover, or {@linkcode setItems}).
@@ -58,6 +58,9 @@ export interface ScrollableGridConfig<TCell extends Phaser.GameObjects.Container
   /** Style for scroll arrows. Unused unless {@linkcode scrollMode} is set to "arrows" */
   arrowStyle?: TextStyle | undefined;
   wrap?: boolean;
+
+  /** Called when the cursor would exit the grid to the left, if wrapping is disabled */
+  onExitLeft?: () => void;
 }
 
 /**
@@ -164,10 +167,12 @@ export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TD
    * Replace the items to be displayed. Resets the cursor and scroll position, redraws the grid,
    * and fires {@linkcode ScrollableGridConfig.onItemSelected} for the first item (if any).
    */
-  setItems(items: TData[]): void {
+  setItems(items: TData[], resetCursor = true): void {
     this.items = items;
     this.scrollBar?.setTotalRows(Math.ceil(items.length / this.COLUMNS));
-    this.setScrollCursor(0, 0);
+    if (resetCursor || this.cursor >= this.ROWS * this.COLUMNS) {
+      this.setScrollCursor(0, 0);
+    }
     this.refreshAll();
   }
 
@@ -178,6 +183,10 @@ export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TD
       this.cursorObj.destroy();
       this.cursorObj = null;
     }
+  }
+
+  public setCursorVisible(visible: boolean): void {
+    this.cursorObj?.setVisible(visible);
   }
 
   /**
@@ -318,6 +327,11 @@ export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TD
     }
   }
 
+  public updateCursorConfig(config: CursorConfig): void {
+    this.config.cursor = config;
+    this.updateCursorVisual();
+  }
+
   /**
    * Update the location of the cursor based on its current location, creating a new texture if one doesn't exist.
    */
@@ -329,7 +343,8 @@ export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TD
       return;
     }
     const cfg = this.config.cursor ?? { texture: "select_cursor_highlight", width: 16, height: 16 };
-    if (!this.cursorObj) {
+    if (!this.cursorObj || this.cursorObj.texture.key !== cfg.texture) {
+      this.cursorObj?.destroy();
       this.cursorObj = globalScene.add
         .nineslice(0, 0, cfg.texture, undefined, cfg.width, cfg.height, 1, 1, 1, 1)
         .setOrigin(0);
@@ -481,6 +496,10 @@ export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TD
       return this.setCursor(this.cursor - 1);
     }
     if (!this.wrap) {
+      if (this.config.onExitLeft) {
+        this.config.onExitLeft();
+        return true;
+      }
       return false;
     }
     if (scrollCursor === maxScrollCursor && currentRowIndex === onScreenRows - 1) {
