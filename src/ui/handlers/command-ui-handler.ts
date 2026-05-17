@@ -8,68 +8,108 @@ import { TextStyle } from "#enums/text-style";
 import { UiMode } from "#enums/ui-mode";
 import type { CommandPhase } from "#phases/command-phase";
 import { PartyUiHandler, PartyUiMode } from "#ui/party-ui-handler";
+import { ScrollableGridHelper } from "#ui/scrollable-grid-helper";
 import { addTextObject } from "#ui/text";
 import { UiHandler } from "#ui/ui-handler";
 import { canTerastallize } from "#utils/pokemon-utils";
 import i18next from "i18next";
 
-export class CommandUiHandler extends UiHandler {
-  private commandsContainer: Phaser.GameObjects.Container;
-  private cursorObj: Phaser.GameObjects.Image | null;
+interface DisplayCommand {
+  command: Command;
+  name: string;
+}
 
-  private teraButton: Phaser.GameObjects.Sprite;
+export class CommandUiHandler extends UiHandler {
+  private gridHelper: ScrollableGridHelper<Phaser.GameObjects.Container, DisplayCommand>;
+  private teraSelected = false;
+  private readonly teraButton: Phaser.GameObjects.Sprite;
 
   protected fieldIndex = 0;
   protected cursor2 = 0;
 
   constructor() {
     super(UiMode.COMMAND);
+    this.teraButton = globalScene.add
+      .sprite(-32, 15, "button_tera")
+      .setName("terastallize-button")
+      .setScale(1.3)
+      .setFrame("fire")
+      .setPipeline(globalScene.spritePipeline, {
+        tone: [0.0, 0.0, 0.0, 0.0],
+        ignoreTimeTint: true,
+        teraColor: getTypeRgb(PokemonType.FIRE),
+        isTerastallized: false,
+      })
+      .setVisible(false);
   }
 
-  setup() {
-    const ui = this.getUi();
-    const commands = [
-      i18next.t("commandUiHandler:fight"),
-      i18next.t("commandUiHandler:ball"),
-      i18next.t("commandUiHandler:pokemon"),
-      i18next.t("commandUiHandler:run"),
-    ];
-
-    this.commandsContainer = globalScene.add.container(217, -38.7);
-    this.commandsContainer.setName("commands");
-    this.commandsContainer.setVisible(false);
-    ui.add(this.commandsContainer);
-
-    this.teraButton = globalScene.add.sprite(-32, 15, "button_tera");
-    this.teraButton.setName("terastallize-button");
-    this.teraButton.setScale(1.3);
-    this.teraButton.setFrame("fire");
-    this.teraButton.setPipeline(globalScene.spritePipeline, {
-      tone: [0.0, 0.0, 0.0, 0.0],
-      ignoreTimeTint: true,
-      teraColor: getTypeRgb(PokemonType.FIRE),
-      isTerastallized: false,
+  public override setup() {
+    this.gridHelper = new ScrollableGridHelper(217, -38.7, {
+      rows: 2,
+      columns: 2,
+      scrollMode: "none",
+      cells: {
+        x: 0,
+        y: 0,
+        spacingX: 56,
+        spacingY: 16,
+        createCell: () => globalScene.add.container(0, 0),
+        renderCell: (container, displayCommand) => {
+          if (displayCommand.command === Command.TERA) {
+            container.add(this.teraButton);
+            return;
+          }
+          const commandText = addTextObject(0, 0, displayCommand.name, TextStyle.WINDOW_BATTLE_COMMAND);
+          container.add(commandText);
+        },
+      },
+      cursor: {
+        texture: "cursor",
+        width: 6,
+        height: 10,
+        offsetX: -8,
+        offsetY: 3,
+      },
+      onItemActioned: (_container, displayCommand) => this.onActionInput(displayCommand.command),
+      onItemSelected: () => {
+        if (this.teraButton.visible) {
+          this.setTeraButtonEnabled(false);
+        }
+      },
+      onExitLeft: () => {
+        if (this.teraButton.visible) {
+          this.setTeraButtonEnabled(true);
+        }
+      },
+      wrap: false,
     });
-    this.commandsContainer.add(this.teraButton);
-
-    for (let c = 0; c < commands.length; c++) {
-      const commandText = addTextObject(
-        c % 2 === 0 ? 0 : 55.8,
-        c < 2 ? 0 : 16,
-        commands[c],
-        TextStyle.WINDOW_BATTLE_COMMAND,
-      );
-      commandText.setName(commands[c]);
-      this.commandsContainer.add(commandText);
-    }
+    this.gridHelper.add(this.teraButton);
+    this.getUi().add(this.gridHelper);
   }
 
   show(args: any[]): boolean {
     super.show(args);
 
+    const commands: DisplayCommand[] = [
+      { command: Command.FIGHT, name: i18next.t("commandUiHandler:fight") },
+      { command: Command.BALL, name: i18next.t("commandUiHandler:ball") },
+      { command: Command.POKEMON, name: i18next.t("commandUiHandler:pokemon") },
+      { command: Command.RUN, name: i18next.t("commandUiHandler:run") },
+    ];
+
+    this.gridHelper.setItems(commands, false);
+    this.getUi().bringToTop(this.gridHelper);
     this.fieldIndex = args.length > 0 ? (args[0] as number) : 0;
 
-    this.commandsContainer.setVisible(true);
+    this.gridHelper.setVisible(true);
+    this.teraSelected = false;
+    if (this.canTera()) {
+      this.teraButton.setVisible(true);
+      this.teraButton.setFrame(PokemonType[globalScene.getField()[this.fieldIndex].getTeraType()].toLowerCase());
+      this.setTeraButtonEnabled(false);
+    } else {
+      this.teraButton.setVisible(false);
+    }
 
     let commandPhase: CommandPhase;
     const currentPhase = globalScene.phaseManager.getCurrentPhase();
@@ -79,17 +119,6 @@ export class CommandUiHandler extends UiHandler {
       commandPhase = globalScene.phaseManager.getStandbyPhase() as CommandPhase;
     }
 
-    if (this.canTera()) {
-      this.teraButton.setVisible(true);
-      this.teraButton.setFrame(PokemonType[globalScene.getField()[this.fieldIndex].getTeraType()].toLowerCase());
-    } else {
-      this.teraButton.setVisible(false);
-      if (this.getCursor() === Command.TERA) {
-        this.setCursor(Command.FIGHT);
-      }
-    }
-    this.toggleTeraButton();
-
     const pokemonName = commandPhase.getPokemon().getNameToRender({ prependFormName: false });
     const messageHandler = this.getUi().getMessageHandler();
     messageHandler.bg.setVisible(true);
@@ -97,92 +126,63 @@ export class CommandUiHandler extends UiHandler {
     messageHandler.movesWindowContainer.setVisible(false);
     messageHandler.message.setWordWrapWidth(this.canTera() ? 910 : 1110);
     messageHandler.showText(i18next.t("commandUiHandler:actionMessage", { pokemonName }), 0);
-
-    if (this.getCursor() === Command.POKEMON) {
-      this.setCursor(Command.FIGHT);
-    } else {
-      this.setCursor(this.getCursor());
-    }
-
     return true;
   }
 
-  processInput(button: Button): boolean {
+  private onActionInput(command: Command): void {
     const ui = this.getUi();
+    switch (command) {
+      case Command.FIGHT:
+        ui.setMode(UiMode.FIGHT, (globalScene.phaseManager.getCurrentPhase() as CommandPhase).getFieldIndex());
+        break;
+      case Command.BALL:
+        ui.setModeWithoutClear(UiMode.BALL);
+        break;
+      case Command.POKEMON:
+        ui.setMode(
+          UiMode.PARTY,
+          PartyUiMode.SWITCH,
+          (globalScene.phaseManager.getCurrentPhase() as CommandPhase).getPokemon().getFieldIndex(),
+          null,
+          PartyUiHandler.FilterNonFainted,
+        );
+        break;
+      case Command.RUN:
+        (globalScene.phaseManager.getCurrentPhase() as CommandPhase).handleCommand(Command.RUN, 0);
+        break;
+      case Command.TERA:
+        ui.setMode(
+          UiMode.FIGHT,
+          (globalScene.phaseManager.getCurrentPhase() as CommandPhase).getFieldIndex(),
+          Command.TERA,
+        );
+        break;
+    }
+  }
 
+  public override processInput(button: Button): boolean {
+    const ui = this.getUi();
     let success = false;
 
-    const cursor = this.getCursor();
-
-    if (button === Button.CANCEL || button === Button.ACTION) {
+    if (this.teraSelected) {
+      success = true;
       if (button === Button.ACTION) {
-        switch (cursor) {
-          // Fight
-          case Command.FIGHT:
-            ui.setMode(UiMode.FIGHT, (globalScene.phaseManager.getCurrentPhase() as CommandPhase).getFieldIndex());
-            success = true;
-            break;
-          // Ball
-          case Command.BALL:
-            ui.setModeWithoutClear(UiMode.BALL);
-            success = true;
-            break;
-          // Pokemon
-          case Command.POKEMON:
-            ui.setMode(
-              UiMode.PARTY,
-              PartyUiMode.SWITCH,
-              (globalScene.phaseManager.getCurrentPhase() as CommandPhase).getPokemon().getFieldIndex(),
-              null,
-              PartyUiHandler.FilterNonFainted,
-            );
-            success = true;
-            break;
-          // Run
-          case Command.RUN:
-            (globalScene.phaseManager.getCurrentPhase() as CommandPhase).handleCommand(Command.RUN, 0);
-            success = true;
-            break;
-          case Command.TERA:
-            ui.setMode(
-              UiMode.FIGHT,
-              (globalScene.phaseManager.getCurrentPhase() as CommandPhase).getFieldIndex(),
-              Command.TERA,
-            );
-            success = true;
-            break;
-        }
-      } else {
-        (globalScene.phaseManager.getCurrentPhase() as CommandPhase).cancel();
+        this.onActionInput(Command.TERA);
+      } else if (button === Button.RIGHT) {
+        this.setTeraButtonEnabled(false);
       }
     } else {
       switch (button) {
+        case Button.CANCEL:
+          (globalScene.phaseManager.getCurrentPhase() as CommandPhase).cancel();
+          success = true;
+          break;
+        case Button.ACTION:
         case Button.UP:
-          if (cursor === Command.POKEMON || cursor === Command.RUN) {
-            success = this.setCursor(cursor - 2);
-          }
-          break;
         case Button.DOWN:
-          if (cursor === Command.FIGHT || cursor === Command.BALL) {
-            success = this.setCursor(cursor + 2);
-          }
-          break;
         case Button.LEFT:
-          if (cursor === Command.BALL || cursor === Command.RUN) {
-            success = this.setCursor(cursor - 1);
-          } else if ((cursor === Command.FIGHT || cursor === Command.POKEMON) && this.canTera()) {
-            success = this.setCursor(Command.TERA);
-            this.toggleTeraButton();
-          }
-          break;
         case Button.RIGHT:
-          if (cursor === Command.FIGHT || cursor === Command.POKEMON) {
-            success = this.setCursor(cursor + 1);
-          } else if (cursor === Command.TERA) {
-            success = this.setCursor(Command.FIGHT);
-            this.toggleTeraButton();
-          }
-          break;
+          success = this.gridHelper.processInput(button);
       }
     }
 
@@ -193,7 +193,7 @@ export class CommandUiHandler extends UiHandler {
     return success;
   }
 
-  canTera(): boolean {
+  private canTera(): boolean {
     const activePokemon = globalScene.getField()[this.fieldIndex];
     const currentTeras = globalScene.arena.playerTerasUsed;
     const canTera = activePokemon.isPlayer() && canTerastallize(activePokemon);
@@ -203,56 +203,21 @@ export class CommandUiHandler extends UiHandler {
     return canTera && currentTeras + plannedTera < MAX_TERAS_PER_ARENA;
   }
 
-  toggleTeraButton() {
+  private setTeraButtonEnabled(enabled: boolean) {
+    this.teraSelected = enabled;
     this.teraButton.setPipeline(globalScene.spritePipeline, {
       tone: [0.0, 0.0, 0.0, 0.0],
       ignoreTimeTint: true,
       teraColor: getTypeRgb(globalScene.getField()[this.fieldIndex].getTeraType()),
-      isTerastallized: this.getCursor() === Command.TERA,
+      isTerastallized: enabled,
     });
+    this.gridHelper.setCursorVisible(!enabled);
   }
 
-  getCursor(): number {
-    return this.fieldIndex ? this.cursor2 : this.cursor;
-  }
-
-  setCursor(cursor: number): boolean {
-    const changed = this.getCursor() !== cursor;
-    if (changed) {
-      if (this.fieldIndex) {
-        this.cursor2 = cursor;
-      } else {
-        this.cursor = cursor;
-      }
-    }
-
-    if (!this.cursorObj) {
-      this.cursorObj = globalScene.add.image(0, 0, "cursor");
-      this.commandsContainer.add(this.cursorObj);
-    }
-
-    if (cursor === Command.TERA) {
-      this.cursorObj.setVisible(false);
-    } else {
-      this.cursorObj.setPosition(-5 + (cursor % 2 === 1 ? 56 : 0), 8 + (cursor >= 2 ? 16 : 0));
-      this.cursorObj.setVisible(true);
-    }
-
-    return changed;
-  }
-
-  clear(): void {
+  public override clear(): void {
     super.clear();
     this.getUi().getMessageHandler().commandWindow.setVisible(false);
-    this.commandsContainer.setVisible(false);
+    this.gridHelper.setVisible(false);
     this.getUi().getMessageHandler().clearText();
-    this.eraseCursor();
-  }
-
-  eraseCursor(): void {
-    if (this.cursorObj) {
-      this.cursorObj.destroy();
-    }
-    this.cursorObj = null;
   }
 }
