@@ -22,25 +22,14 @@ interface DisplayCommand {
 export class CommandUiHandler extends UiHandler {
   private gridHelper: ScrollableGridHelper<Phaser.GameObjects.Container, DisplayCommand>;
   private teraSelected = false;
-  private readonly teraButton: Phaser.GameObjects.Sprite;
+  private teraButton: Phaser.GameObjects.Sprite;
 
   protected fieldIndex = 0;
   protected cursor2 = 0;
 
   constructor() {
     super(UiMode.COMMAND);
-    this.teraButton = globalScene.add
-      .sprite(-32, 15, "button_tera")
-      .setName("terastallize-button")
-      .setScale(1.3)
-      .setFrame("fire")
-      .setPipeline(globalScene.spritePipeline, {
-        tone: [0.0, 0.0, 0.0, 0.0],
-        ignoreTimeTint: true,
-        teraColor: getTypeRgb(PokemonType.FIRE),
-        isTerastallized: false,
-      })
-      .setVisible(false);
+    this.setupTeraButton();
   }
 
   public override setup() {
@@ -85,6 +74,43 @@ export class CommandUiHandler extends UiHandler {
     });
     this.gridHelper.add(this.teraButton);
     this.getUi().add(this.gridHelper);
+  }
+
+  private setupTeraButton(): void {
+    this.teraButton = globalScene.add
+      .sprite(-32, 15, "button_tera")
+      .setName("terastallize-button")
+      .setScale(1.3)
+      .setFrame("fire")
+      .setPipeline(globalScene.spritePipeline, {
+        tone: [0.0, 0.0, 0.0, 0.0],
+        ignoreTimeTint: true,
+        teraColor: getTypeRgb(PokemonType.FIRE),
+        isTerastallized: false,
+      })
+      .setVisible(false)
+      .setInteractive();
+
+    this.teraButton.on("pointerover", () => {
+      if (!this.hasInputOwnership()) {
+        return;
+      }
+      this.setTeraButtonEnabled(true);
+    });
+
+    this.teraButton.on("pointerout", () => {
+      if (!this.hasInputOwnership()) {
+        return;
+      }
+      this.setTeraButtonEnabled(false);
+    });
+
+    this.teraButton.on("pointerdown", () => {
+      if (!this.hasInputOwnership()) {
+        return;
+      }
+      this.onActionInput(Command.TERA);
+    });
   }
 
   show(args: any[]): boolean {
