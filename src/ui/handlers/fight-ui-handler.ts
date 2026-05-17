@@ -13,15 +13,20 @@ import type { EnemyPokemon, Pokemon } from "#field/pokemon";
 import type { PokemonMove } from "#moves/pokemon-move";
 import type { CommandPhase } from "#phases/command-phase";
 import { MoveInfoOverlay } from "#ui/move-info-overlay";
+import { ScrollableGridHelper } from "#ui/scrollable-grid-helper";
 import { addTextObject, getTextColor } from "#ui/text";
 import { UiHandler } from "#ui/ui-handler";
 import { fixedInt, getLocalizedSpriteKey, padInt } from "#utils/common";
 import i18next from "i18next";
 
+interface MoveWithUser {
+  readonly move: PokemonMove;
+  readonly user: Pokemon;
+}
+
 export class FightUiHandler extends UiHandler implements InfoToggle {
   public static readonly MOVES_CONTAINER_NAME = "moves";
 
-  private movesContainer: Phaser.GameObjects.Container;
   private moveInfoContainer: Phaser.GameObjects.Container;
   private typeIcon: Phaser.GameObjects.Sprite;
   private ppLabel: Phaser.GameObjects.Text;
@@ -30,9 +35,9 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
   private powerText: Phaser.GameObjects.Text;
   private accuracyLabel: Phaser.GameObjects.Text;
   private accuracyText: Phaser.GameObjects.Text;
-  private cursorObj: Phaser.GameObjects.Image | null;
   private moveCategoryIcon: Phaser.GameObjects.Sprite;
   private moveInfoOverlay: MoveInfoOverlay;
+  private gridHelper: ScrollableGridHelper<Phaser.GameObjects.Container, MoveWithUser>;
 
   protected fieldIndex = 0;
   protected fromCommand: Command = Command.FIGHT;
@@ -52,8 +57,38 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
   setup() {
     const ui = this.getUi();
 
-    this.movesContainer = globalScene.add.container(18, -38.7).setName(FightUiHandler.MOVES_CONTAINER_NAME);
-    ui.add(this.movesContainer);
+    this.gridHelper = new ScrollableGridHelper(18, -38.7, {
+      rows: 2,
+      columns: 2,
+      scrollMode: "none",
+      cells: {
+        x: 0,
+        y: 0,
+        spacingX: 114,
+        spacingY: 16,
+        createCell: () => globalScene.add.container(0, 0),
+        renderCell: (container, moveWithUser) => {
+          const moveText = addTextObject(0, 0, moveWithUser.move.getName(), TextStyle.WINDOW).setName(
+            "text-empty-move",
+          );
+          moveText
+            .setName(moveWithUser.move.getName())
+            .setColor(this.getMoveColor(moveWithUser.user, moveWithUser.move) ?? moveText.style.color);
+          container.add(moveText);
+        },
+      },
+      cursor: {
+        texture: "cursor",
+        width: 6,
+        height: 10,
+        offsetX: -8,
+        offsetY: 2.5,
+      },
+      onItemSelected: (_cell, moveWithUser) => this.onMoveSelect(moveWithUser.move),
+      onItemActioned: () => this.processActionInput(),
+    });
+
+    ui.add(this.gridHelper);
 
     this.moveInfoContainer = globalScene.add.container(1, 0).setName("move-info");
     ui.add(this.moveInfoContainer);
@@ -122,6 +157,8 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
 
   override show(args: [number?, Command?]): boolean {
     super.show(args);
+    const pokemon = (globalScene.phaseManager.getCurrentPhase() as CommandPhase).getPokemon();
+    const moveset = pokemon.getMoveset();
 
     this.fieldIndex = args[0] ?? 0;
     this.fromCommand = args[1] ?? Command.FIGHT;
@@ -130,16 +167,20 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
     messageHandler.bg.setVisible(false);
     messageHandler.commandWindow.setVisible(false);
     messageHandler.movesWindowContainer.setVisible(true);
-    const pokemon = (globalScene.phaseManager.getCurrentPhase() as CommandPhase).getPokemon();
-    if (pokemon.tempSummonData.turnCount <= 1) {
-      this.setCursor(0);
-    } else {
-      this.setCursor(this.fieldIndex ? this.cursor2 : this.cursor);
-    }
-    this.displayMoves();
+
+    this.onMoveSelect(moveset[0]);
+    this.displayMoves(pokemon);
     this.toggleInfo(false); // in case cancel was pressed while info toggle is active
     this.active = true;
     return true;
+  }
+
+  private processActionInput(): boolean {
+    return (globalScene.phaseManager.getCurrentPhase() as CommandPhase).handleCommand(
+      this.fromCommand,
+      this.gridHelper.getCursor(),
+      MoveUseMode.NORMAL,
+    );
   }
 
   /**
@@ -150,17 +191,10 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
   processInput(button: Button): boolean {
     const ui = this.getUi();
     let success = false;
-    const cursor = this.getCursor();
 
     switch (button) {
       case Button.ACTION:
-        if (
-          (globalScene.phaseManager.getCurrentPhase() as CommandPhase).handleCommand(
-            this.fromCommand,
-            cursor,
-            MoveUseMode.NORMAL,
-          )
-        ) {
+        if (this.processActionInput()) {
           success = true;
         } else {
           ui.playError();
@@ -176,24 +210,10 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
         break;
       }
       case Button.UP:
-        if (cursor >= 2) {
-          success = this.setCursor(cursor - 2);
-        }
-        break;
       case Button.DOWN:
-        if (cursor < 2) {
-          success = this.setCursor(cursor + 2);
-        }
-        break;
       case Button.LEFT:
-        if (cursor % 2 === 1) {
-          success = this.setCursor(cursor - 1);
-        }
-        break;
       case Button.RIGHT:
-        if (cursor % 2 === 0) {
-          success = this.setCursor(cursor + 1);
-        }
+        this.gridHelper.processInput(button);
         break;
     }
 
@@ -212,26 +232,20 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
     // The info overlay will already fade in, so we should hide the move name text and cursor immediately
     // rather than adjusting alpha via a tween.
     if (visible) {
-      this.movesContainer.setVisible(false).setAlpha(0);
-      this.cursorObj?.setVisible(false).setAlpha(0);
+      this.gridHelper.setVisible(false);
       return;
     }
     globalScene.tweens.add({
-      targets: [this.movesContainer, this.cursorObj],
+      targets: [this.gridHelper],
       duration: fixedInt(125),
       ease: "Sine.easeInOut",
       alpha: 1,
     });
-    this.movesContainer.setVisible(true);
-    this.cursorObj?.setVisible(true);
+    this.gridHelper.setVisible(true);
   }
 
   isActive(): boolean {
     return this.active;
-  }
-
-  getCursor(): number {
-    return this.fieldIndex ? this.cursor2 : this.cursor;
   }
 
   /** @returns TextStyle according to percentage of PP remaining */
@@ -252,18 +266,9 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
    * Populate the move info overlay with the information of the move at the given cursor index
    * @param cursor - The cursor position to set the move info for
    */
-  private setMoveInfo(cursor: number): void {
+  private setMoveInfo(pokemonMove: PokemonMove): void {
     const pokemon = (globalScene.phaseManager.getCurrentPhase() as CommandPhase).getPokemon();
-    const moveset = pokemon.getMoveset();
-
-    const hasMove = cursor < moveset.length;
-    this.setInfoVis(hasMove);
-
-    if (!hasMove) {
-      return;
-    }
-
-    const pokemonMove = moveset[cursor];
+    this.setInfoVis(true);
     const moveType = pokemon.getMoveType(pokemonMove.getMove());
     const textureKey = getLocalizedSpriteKey("types");
     this.typeIcon.setTexture(textureKey, PokemonType[moveType].toLowerCase()).setScale(0.8);
@@ -292,31 +297,10 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
     });
   }
 
-  setCursor(cursor: number): boolean {
-    const ui = this.getUi();
-
+  private onMoveSelect(pokemonMove: PokemonMove): boolean {
     this.moveInfoOverlay.clear();
-    const changed = this.getCursor() !== cursor;
-    if (changed) {
-      if (this.fieldIndex) {
-        this.cursor2 = cursor;
-      } else {
-        this.cursor = cursor;
-      }
-    }
-
-    this.setMoveInfo(cursor);
-
-    if (!this.cursorObj) {
-      const isTera = this.fromCommand === Command.TERA;
-      this.cursorObj = globalScene.add.image(0, 0, isTera ? "cursor_tera" : "cursor");
-      this.cursorObj.setScale(isTera ? 0.7 : 1);
-      ui.add(this.cursorObj);
-    }
-
-    this.cursorObj.setPosition(13 + (cursor % 2 === 1 ? 114 : 0), -31 + (cursor >= 2 ? 15 : 0));
-
-    return changed;
+    this.setMoveInfo(pokemonMove);
+    return true;
   }
 
   /**
@@ -341,28 +325,8 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
     return `${effectiveness}x`;
   }
 
-  displayMoves() {
-    const pokemon = (globalScene.phaseManager.getCurrentPhase() as CommandPhase).getPokemon();
-    const moveset = pokemon.getMoveset();
-
-    for (let moveIndex = 0; moveIndex < 4; moveIndex++) {
-      const moveText = addTextObject(
-        moveIndex % 2 === 0 ? 0 : 114,
-        moveIndex < 2 ? 0 : 16,
-        "-",
-        TextStyle.WINDOW,
-      ).setName("text-empty-move");
-
-      if (moveIndex < moveset.length) {
-        const pokemonMove = moveset[moveIndex]!; // TODO is the bang correct?
-        moveText
-          .setText(pokemonMove.getName())
-          .setName(pokemonMove.getName())
-          .setColor(this.getMoveColor(pokemon, pokemonMove) ?? moveText.style.color);
-      }
-
-      this.movesContainer.add(moveText);
-    }
+  displayMoves(pokemon: Pokemon) {
+    this.gridHelper.setItems(pokemon.getMoveset().map(move => ({ user: pokemon, move })));
   }
 
   /**
@@ -409,23 +373,14 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
     this.setInfoVis(false);
     this.moveInfoOverlay.clear();
     messageHandler.bg.setVisible(true);
-    this.eraseCursor();
     this.active = false;
   }
 
   clearMoves() {
-    this.movesContainer.removeAll(true);
-
+    this.gridHelper.clearItems();
     const opponents = (globalScene.phaseManager.getCurrentPhase() as CommandPhase).getPokemon().getOpponents();
     opponents.forEach(opponent => {
       (opponent as EnemyPokemon).updateEffectiveness();
     });
-  }
-
-  eraseCursor() {
-    if (this.cursorObj) {
-      this.cursorObj.destroy();
-    }
-    this.cursorObj = null;
   }
 }

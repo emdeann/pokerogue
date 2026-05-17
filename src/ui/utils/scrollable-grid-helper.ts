@@ -23,7 +23,7 @@ export interface ScrollableGridConfig<TCell extends GridCell, TData> {
   columns: number;
 
   /** Scroll bar config local to the grid container */
-  scrollBar: { x: number; y: number; width: number; height: number };
+  scrollBar?: { x: number; y: number; width: number; height: number };
 
   /** Cell grid configuration */
   cells: {
@@ -80,7 +80,7 @@ export class ScrollableGridHelper<TCell extends GridCell, TData> extends Phaser.
   private readonly ROWS: number;
   private readonly COLUMNS: number;
   private readonly config: ScrollableGridConfig<TCell, TData>;
-  private readonly scrollBar: ScrollBar;
+  private readonly scrollBar: ScrollBar | undefined;
   private readonly cellsContainer: Phaser.GameObjects.Container;
   private readonly cells: TCell[];
   private cursorObj: Phaser.GameObjects.NineSlice | null = null;
@@ -109,18 +109,21 @@ export class ScrollableGridHelper<TCell extends GridCell, TData> extends Phaser.
     this.COLUMNS = config.columns;
     this.scrollMode = config.scrollMode ?? "scrollbar";
 
-    this.scrollBar = new ScrollBar(
-      config.scrollBar.x,
-      config.scrollBar.y,
-      config.scrollBar.width,
-      config.scrollBar.height,
-      this.ROWS,
-      (newRow: number) => {
-        if (!this.silentScroll) {
-          this.handleScrollChange(newRow);
-        }
-      },
-    );
+    if (config.scrollBar != null) {
+      this.scrollBar = new ScrollBar(
+        config.scrollBar.x,
+        config.scrollBar.y,
+        config.scrollBar.width,
+        config.scrollBar.height,
+        this.ROWS,
+        (newRow: number) => {
+          if (!this.silentScroll) {
+            this.handleScrollChange(newRow);
+          }
+        },
+      );
+      this.add(this.scrollBar);
+    }
 
     this.cellsContainer = globalScene.add.container(config.cells.x, config.cells.y);
     this.cells = [];
@@ -133,8 +136,7 @@ export class ScrollableGridHelper<TCell extends GridCell, TData> extends Phaser.
       this.cells.push(cell);
       this.cellsContainer.add(cell);
     }
-
-    this.add([this.scrollBar, this.cellsContainer]);
+    this.add(this.cellsContainer);
 
     if (this.scrollMode === "arrows") {
       const arrowX = config.cells.x + ((this.COLUMNS - 1) * config.cells.spacingX) / 2;
@@ -148,7 +150,7 @@ export class ScrollableGridHelper<TCell extends GridCell, TData> extends Phaser.
 
       this.add([this.upArrow, this.downArrow]);
     }
-    this.scrollBar.setVisible(false);
+    this.scrollBar?.setVisible(false);
     this.cellsContainer.setInteractive(
       new Phaser.Geom.Rectangle(0, 0, this.COLUMNS * config.cells.spacingX, this.ROWS * config.cells.spacingY),
       Phaser.Geom.Rectangle.Contains,
@@ -172,7 +174,7 @@ export class ScrollableGridHelper<TCell extends GridCell, TData> extends Phaser.
    */
   setItems(items: TData[]): void {
     this.items = items;
-    this.scrollBar.setTotalRows(Math.ceil(items.length / this.COLUMNS));
+    this.scrollBar?.setTotalRows(Math.ceil(items.length / this.COLUMNS));
     this.setScrollCursor(0, 0);
     this.refreshAll();
   }
@@ -199,7 +201,7 @@ export class ScrollableGridHelper<TCell extends GridCell, TData> extends Phaser.
       return false;
     }
 
-    const scrollCursor = this.scrollBar.getCurrentRow();
+    const scrollCursor = this.scrollBar?.getCurrentRow() ?? 0;
     const onScreenRows = Math.min(this.ROWS, Math.ceil(this.items.length / this.COLUMNS));
     const maxScrollCursor = Math.max(0, Math.ceil(this.items.length / this.COLUMNS) - onScreenRows);
     const currentRowIndex = Math.floor(this.cursor / this.COLUMNS);
@@ -306,7 +308,7 @@ export class ScrollableGridHelper<TCell extends GridCell, TData> extends Phaser.
    * @returns The offset from relative index to absolute index for an item given the scroll amount
    */
   private getItemOffset(): number {
-    return this.scrollBar.getCurrentRow() * this.COLUMNS;
+    return this.scrollBar?.getCurrentRow() ?? 0 * this.COLUMNS;
   }
 
   /**
@@ -381,15 +383,15 @@ export class ScrollableGridHelper<TCell extends GridCell, TData> extends Phaser.
 
     switch (this.scrollMode) {
       case "scrollbar":
-        this.scrollBar.setVisible(needsScroll);
+        this.scrollBar?.setVisible(needsScroll);
         break;
       case "arrows":
-        this.scrollBar.setVisible(false);
+        this.scrollBar?.setVisible(false);
         this.upArrow?.setVisible(canScrollUp);
         this.downArrow?.setVisible(canScrollDown);
         break;
       case "none":
-        this.scrollBar.setVisible(false);
+        this.scrollBar?.setVisible(false);
         break;
     }
   }
@@ -427,7 +429,7 @@ export class ScrollableGridHelper<TCell extends GridCell, TData> extends Phaser.
       this.cursor = cursor;
     }
     this.silentScroll = true;
-    this.scrollBar.setScrollCursor(scrollCursor);
+    this.scrollBar?.setScrollCursor(scrollCursor);
     this.silentScroll = false;
     this.refreshAll();
     return true;
@@ -491,5 +493,14 @@ export class ScrollableGridHelper<TCell extends GridCell, TData> extends Phaser.
       return this.setCursor(this.cursor + 1);
     }
     return this.setCursor(this.cursor - currentColumnIndex);
+  }
+
+  public clearItems(): void {
+    this.setItems([]);
+  }
+
+  // todo this is provided for migration simplicity but will ideally be removed eventually
+  public getCursor(): number {
+    return this.cursor;
   }
 }
