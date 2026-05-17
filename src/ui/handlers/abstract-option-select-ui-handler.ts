@@ -147,7 +147,7 @@ export abstract class AbstractOptionSelectUiHandler extends UiHandler {
 
     this.listHelper = new ScrollableListHelper<OptionSelectItem>(0, 0, {
       rows,
-      items: { x: itemsX, y: itemsY, rowSpacing, width: itemsWidth },
+      items: { x: itemsX, y: itemsY, height: rowSpacing, width: itemsWidth },
       scrollMode: "arrows",
       arrowStyle: this.defaultTextStyle,
       cursor: {

@@ -166,7 +166,7 @@ export class MenuUiHandler extends MessageUiHandler {
       items: {
         x: this.menuBg.x + 10 + 24 * this.scale,
         y: this.menuBg.y + 6,
-        rowSpacing: 96 * this.scale,
+        height: 96 * this.scale,
         width: this.menuBg.width - 20 - 24 * this.scale,
       },
       scrollMode: "arrows",

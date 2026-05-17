@@ -328,7 +328,7 @@ export class EggGachaUiHandler extends MessageUiHandler {
       items: {
         x: -bgWidth + 16,
         y: -bgHeight + 9,
-        rowSpacing: 98 * this.scale,
+        height: 98 * this.scale,
         width: bgWidth - 20,
       },
       scrollMode: "arrows",
