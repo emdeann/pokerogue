@@ -86,6 +86,7 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
       },
       onItemSelected: (_cell, moveWithUser) => this.onMoveSelect(moveWithUser.move),
       onItemActioned: () => this.processActionInput(),
+      wrap: false,
     });
 
     ui.add(this.gridHelper);

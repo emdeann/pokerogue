@@ -57,6 +57,7 @@ export interface ScrollableGridConfig<TCell extends Phaser.GameObjects.Container
   scrollMode?: "scrollbar" | "arrows" | "none" | undefined;
   /** Style for scroll arrows. Unused unless {@linkcode scrollMode} is set to "arrows" */
   arrowStyle?: TextStyle | undefined;
+  wrap?: boolean;
 }
 
 /**
@@ -83,6 +84,7 @@ export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TD
   private readonly downArrow: Phaser.GameObjects.Text | null = null;
   /** Whether touch controls are currently accepted by this grid */
   private touchEnabled = true;
+  private readonly wrap: boolean;
 
   /**
    * @param x - The x coordinate for the grid container
@@ -97,6 +99,7 @@ export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TD
     this.ROWS = config.rows;
     this.COLUMNS = config.columns;
     this.scrollMode = config.scrollMode ?? "scrollbar";
+    this.wrap = config.wrap ?? true;
 
     if (config.scrollBar != null) {
       this.scrollBar = new ScrollBar(
@@ -437,6 +440,9 @@ export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TD
     if (scrollCursor > 0) {
       return this.setScrollCursor(scrollCursor - 1);
     }
+    if (!this.wrap) {
+      return false;
+    }
     let newCursor = this.cursor + (onScreenRows - 1) * this.COLUMNS;
     if (newCursor > lastVisibleIndex) {
       newCursor -= this.COLUMNS;
@@ -457,6 +463,9 @@ export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TD
     if (scrollCursor < maxScrollCursor) {
       return this.setScrollCursor(scrollCursor + 1);
     }
+    if (!this.wrap) {
+      return false;
+    }
     return this.setScrollCursor(0, this.cursor % this.COLUMNS);
   }
 
@@ -471,6 +480,9 @@ export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TD
     if (currentColumnIndex > 0) {
       return this.setCursor(this.cursor - 1);
     }
+    if (!this.wrap) {
+      return false;
+    }
     if (scrollCursor === maxScrollCursor && currentRowIndex === onScreenRows - 1) {
       return this.setCursor(lastVisibleIndex);
     }
@@ -480,6 +492,9 @@ export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TD
   private processRightInput(currentColumnIndex: number, itemOffset: number): boolean {
     if (currentColumnIndex < this.COLUMNS - 1 && this.cursor + itemOffset < this.items.length - 1) {
       return this.setCursor(this.cursor + 1);
+    }
+    if (!this.wrap) {
+      return false;
     }
     return this.setCursor(this.cursor - currentColumnIndex);
   }
