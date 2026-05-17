@@ -35,10 +35,10 @@ export interface ScrollableListConfig<TData> {
 
   /** Item layout local to the list container */
   items: {
-    x: number;
-    y: number;
-    rowSpacing: number;
-    width?: number;
+    x?: number;
+    y?: number;
+    height: number;
+    width: number;
   };
 
   /** Callback to obtain the text label for a given option */
@@ -49,6 +49,8 @@ export interface ScrollableListConfig<TData> {
   textStyle?: TextStyle;
   /** Additional style options via Phaser */
   textOptions?: Phaser.Types.GameObjects.Text.TextStyle;
+  textAlign?: "left" | "right";
+  cancelText?: string;
 
   icon?: ScrollableListSprite<TData>;
   overlay?: ScrollableListSprite<TData>;
@@ -67,15 +69,18 @@ export interface ScrollableListConfig<TData> {
 
   onItemSelected?: (data: TData) => void;
   onItemActioned?: (data: TData) => void;
+  onCancel?: () => void;
 }
 
 /** Wrapper of {@linkcode ScrollableGridHelper} for 1D vertical text-based lists */
 export class ScrollableListHelper<TData> extends Phaser.GameObjects.Container {
-  private readonly gridHelper: ScrollableGridHelper<ListCell, TData>;
+  private readonly gridHelper: ScrollableGridHelper<ListCell, TData | string>;
+  private readonly config: ScrollableListConfig<TData>;
 
   constructor(x: number, y: number, config: ScrollableListConfig<TData>) {
     super(globalScene, x, y);
     globalScene.add.existing(this);
+    this.config = config;
 
     const textStyle = config.textStyle ?? TextStyle.WINDOW;
 
@@ -109,17 +114,17 @@ export class ScrollableListHelper<TData> extends Phaser.GameObjects.Container {
       }
     };
 
-    this.gridHelper = new ScrollableGridHelper<ListCell, TData>(0, 0, {
-      rows: config.rows,
+    this.gridHelper = new ScrollableGridHelper<ListCell, TData | string>(0, 0, {
+      rows: config.rows + +(config.cancelText != null),
       columns: 1,
       scrollMode: config.scrollMode ?? "scrollbar",
       arrowStyle: config.arrowStyle,
       scrollBar: config.scrollBar ?? { x: 0, y: 0, width: 0, height: 0 },
       cells: {
-        x: config.items.x,
-        y: config.items.y,
+        x: config.items.x ?? 0,
+        y: config.items.y ?? 0,
         spacingX: config.items.width ?? 0,
-        spacingY: config.items.rowSpacing,
+        spacingY: config.items.height,
         createCell: () => {
           const container = globalScene.add.container(0, 0) as ListCell;
           const textObj = config.bbcode
@@ -139,21 +144,42 @@ export class ScrollableListHelper<TData> extends Phaser.GameObjects.Container {
           return container;
         },
         renderCell: (cell, data) => {
-          cell.textObj.setText(config.getLabel(data));
-          if (config.icon && cell.iconObj) {
-            applySprite(cell.iconObj, config.icon, data);
+          if (this.isCancelItem(data)) {
+            cell.textObj.setText(data);
+          } else {
+            cell.textObj.setText(config.getLabel(data));
+            if (config.icon && cell.iconObj) {
+              applySprite(cell.iconObj, config.icon, data);
+            }
+            if (config.overlay && cell.overlayObj) {
+              applySprite(cell.overlayObj, config.overlay, data);
+            }
           }
-          if (config.overlay && cell.overlayObj) {
-            applySprite(cell.overlayObj, config.overlay, data);
+          if (config.textAlign === "right" && cell.textObj.displayWidth > 0 && config.items.width != null) {
+            cell.textObj.x = config.items.width - cell.textObj.displayWidth;
           }
         },
       },
       cursor: config.cursor,
-      onItemSelected: config.onItemSelected ? (_cell, data) => config.onItemSelected!(data) : undefined,
-      onItemActioned: config.onItemActioned ? (_cell, data) => config.onItemActioned!(data) : undefined,
+      onItemSelected: (_cell, data) => {
+        if (!this.isCancelItem(data)) {
+          config.onItemSelected?.(data);
+        }
+      },
+      onItemActioned: (_cell, data) => {
+        if (this.isCancelItem(data)) {
+          config.onCancel?.();
+          return;
+        }
+        config.onItemActioned?.(data);
+      },
     });
 
     this.add(this.gridHelper);
+  }
+
+  private isCancelItem(data: TData | string): data is string {
+    return this.config.cancelText != null && data === this.config.cancelText;
   }
 
   /**
@@ -161,7 +187,10 @@ export class ScrollableListHelper<TData> extends Phaser.GameObjects.Container {
    * and fires {@linkcode ScrollableGridConfig.onItemSelected} for the first item (if any).
    */
   setItems(items: TData[]): void {
-    this.gridHelper.setItems(items);
+    const displayItems: (TData | string)[] =
+      this.config.cancelText != null ? [...items, this.config.cancelText] : items;
+
+    this.gridHelper.setItems(displayItems);
   }
 
   /** Reset scrolling + cursor position and remove the cursor visual. */

@@ -4,19 +4,7 @@ import { TextStyle } from "#enums/text-style";
 import { ScrollBar } from "#ui/scroll-bar";
 import { addTextObject } from "#ui/text";
 
-/**
- * Minimal type for a renderable grid cell based on usage
- */
-export type GridCell = Phaser.GameObjects.GameObject &
-  Phaser.GameObjects.Components.Transform &
-  Phaser.GameObjects.Components.Visible & {
-    width: number;
-    height: number;
-    originX: number;
-    originY: number;
-  };
-
-export interface ScrollableGridConfig<TCell extends GridCell, TData> {
+export interface ScrollableGridConfig<TCell extends Phaser.GameObjects.Container, TData> {
   /** Maximum number of rows shown at once */
   rows: number;
   /** Number of columns */
@@ -76,7 +64,8 @@ export interface ScrollableGridConfig<TCell extends GridCell, TData> {
  *
  * Handles all common tasks to grids and menus: item display, cursor movement, touch input, scrolling, etc.
  */
-export class ScrollableGridHelper<TCell extends GridCell, TData> extends Phaser.GameObjects.Container {
+export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TData> extends Phaser.GameObjects
+  .Container {
   private readonly ROWS: number;
   private readonly COLUMNS: number;
   private readonly config: ScrollableGridConfig<TCell, TData>;
