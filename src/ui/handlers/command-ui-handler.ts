@@ -105,7 +105,7 @@ export class CommandUiHandler extends UiHandler {
       this.setTeraButtonEnabled(false);
     });
 
-    this.teraButton.on("pointerdown", () => {
+    this.teraButton.on("pointerup", () => {
       if (!this.hasInputOwnership()) {
         return;
       }

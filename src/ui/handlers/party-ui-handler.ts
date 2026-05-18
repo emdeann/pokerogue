@@ -1267,9 +1267,6 @@ export class PartyUiHandler extends MessageUiHandler {
     }
 
     this.optionsMode = true;
-    for (const slot of this.partySlots) {
-      slot.setInputEnabled(false);
-    }
 
     let optionsMessage = i18next.t("partyUiHandler:doWhatWithThisPokemon");
 
@@ -1829,19 +1826,12 @@ export class PartyUiHandler extends MessageUiHandler {
   }
 
   clearOptions() {
-    // hide the overlay
     this.moveInfoOverlay.clear();
     this.optionsMode = false;
     this.options.splice(0, this.options.length);
     this.optionsList?.destroy();
     this.optionsList = null;
     this.optionsContainer.removeAll(true);
-
-    // Re-enable slot taps now that the submenu is gone.
-    for (const slot of this.partySlots) {
-      slot.setInputEnabled(true);
-    }
-
     this.partyMessageBox.setSize(262, 30);
     this.showPartyText();
   }
@@ -1923,18 +1913,6 @@ class PartySlot extends Phaser.GameObjects.Container {
 
   getPokemon(): PlayerPokemon {
     return this.pokemon;
-  }
-
-  /**
-   * Enable or disable pointer hit-testing on this slot. Disabled while a submenu
-   * is open so taps on submenu options can't fall through to the slot beneath.
-   */
-  public setInputEnabled(enabled: boolean): void {
-    if (enabled) {
-      this.slotBg.setInteractive({ useHandCursor: true });
-    } else {
-      this.slotBg.disableInteractive();
-    }
   }
 
   setup(partyUiMode: PartyUiMode, tmMoveId: MoveId) {

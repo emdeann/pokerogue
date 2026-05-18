@@ -435,6 +435,7 @@ export class BattleScene extends SceneBase {
     this.renderer.pipelines.add("Sprite", this.spritePipeline);
     this.fieldSpritePipeline = new FieldSpritePipeline(this.game);
     this.renderer.pipelines.add("FieldSprite", this.fieldSpritePipeline);
+    this.input.setTopOnly(true); // we never want touch events to propogate to covered elements
 
     this.launchBattle();
   }

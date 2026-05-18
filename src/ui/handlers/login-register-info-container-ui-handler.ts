@@ -101,15 +101,15 @@ export abstract class LoginRegisterInfoContainerUiHandler extends FormModalUiHan
 
     this.usernameInfoImage //
       .setPositionRelative(this.infoContainer, 0, 0)
-      .on("pointerdown", () => this.showUsernames(config));
+      .on("pointerup", () => this.showUsernames(config));
 
     this.saveDownloadImage //
       .setPositionRelative(this.infoContainer, 20, 0)
-      .on("pointerdown", () => this.downloadSaves(config));
+      .on("pointerup", () => this.downloadSaves(config));
 
     this.changeLanguageImage //
       .setPositionRelative(this.infoContainer, 40, 0)
-      .on("pointerdown", () => {
+      .on("pointerup", () => {
         this.setInteractive(false);
         globalScene.ui.setOverlayMode(UiMode.OPTION_SELECT, {
           options: languageOptions,

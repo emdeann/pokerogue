@@ -27,7 +27,7 @@ export abstract class OAuthProvidersUiHandler extends LoginRegisterInfoContainer
       .setActive(false);
 
     [this.discordImage, this.googleImage].forEach(img => {
-      img.off("pointerdown");
+      img.off("pointerup");
     });
   }
 
@@ -91,7 +91,7 @@ export abstract class OAuthProvidersUiHandler extends LoginRegisterInfoContainer
     this.discordImage //
       .setDisplaySize(20, 20)
       .setPosition(externalPartyIconWidth, this.externalPartyBg.height - 40)
-      .on("pointerdown", () => {
+      .on("pointerup", () => {
         const redirectUri = getRedirectUri("discord");
         const discordId = import.meta.env.VITE_DISCORD_CLIENT_ID;
         const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${discordId}&redirect_uri=${redirectUri}&response_type=code&scope=identify&prompt=none`;
@@ -101,7 +101,7 @@ export abstract class OAuthProvidersUiHandler extends LoginRegisterInfoContainer
     this.googleImage //
       .setDisplaySize(20, 20)
       .setPosition(externalPartyIconWidth, this.externalPartyBg.height - 60)
-      .on("pointerdown", () => {
+      .on("pointerup", () => {
         const redirectUri = getRedirectUri("google");
         const googleId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
         const googleUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${googleId}&redirect_uri=${redirectUri}&response_type=code&scope=openid`;

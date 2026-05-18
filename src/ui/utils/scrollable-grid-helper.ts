@@ -158,7 +158,7 @@ export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TD
       this.handlePointerMove(localX, localY);
     });
 
-    this.cellsContainer.on("pointerdown", (_pointer: Phaser.Input.Pointer, localX: number, localY: number) => {
+    this.cellsContainer.on("pointerup", (_pointer: Phaser.Input.Pointer, localX: number, localY: number) => {
       this.handlePointerDown(localX, localY);
     });
   }

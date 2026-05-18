@@ -134,15 +134,15 @@ export abstract class FormModalUiHandler extends ModalUiHandler {
       // Some subclasses use this to add behavior to the submit and cancel action
 
       this.buttonBgs[0] // formatting
-        .off("pointerdown")
-        .on("pointerdown", () => {
+        .off("pointerup")
+        .on("pointerup", () => {
           if (this.submitAction && globalScene.tweens.getTweensOf(this.modalContainer).length === 0) {
             this.submitAction();
           }
         });
       this.buttonBgs[1] // formatting
-        ?.off("pointerdown")
-        .on("pointerdown", () => {
+        ?.off("pointerup")
+        .on("pointerup", () => {
           // The seemingly redundant cancelAction check is intentionally left in as a defensive programming measure
           if (this.cancelAction && globalScene.tweens.getTweensOf(this.modalContainer).length === 0) {
             this.cancelAction();
