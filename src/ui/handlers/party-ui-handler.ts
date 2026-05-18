@@ -1223,10 +1223,36 @@ export class PartyUiHandler extends MessageUiHandler {
       globalScene.add.existing(partySlot);
       this.partySlotsContainer.add(partySlot);
       this.partySlots.push(partySlot);
+      partySlot.on("hover", () => this.moveCursorToSlot(slotIndex));
+      partySlot.on("tap", () => this.handleSlotTap(slotIndex));
       if (this.cursor === slotIndex) {
         partySlot.select();
       }
     }
+  }
+
+  /**
+   * Move the cursor to the given party slot in response to a pointer interaction.
+   *
+   * @returns Whether the cursor actually moved.
+   */
+  private moveCursorToSlot(slotIndex: number): boolean {
+    if (this.optionsMode || this.pendingPrompt || this.blockInput) {
+      return false;
+    }
+    const changed = this.setCursor(slotIndex);
+    if (changed) {
+      this.getUi().playSelect();
+    }
+    return changed;
+  }
+
+  /**
+   * Handle a touch/click tap on a party member slot.
+   */
+  private handleSlotTap(slotIndex: number): void {
+    this.moveCursorToSlot(slotIndex);
+    this.processInput(Button.ACTION);
   }
 
   setCursor(cursor: number): boolean {
@@ -1979,6 +2005,10 @@ class PartySlot extends Phaser.GameObjects.Container {
     this.slotBg = globalScene.add.sprite(0, 0, this.slotBgKey, fullSlotBgKey);
     this.slotBg.setOrigin(0);
     this.add(this.slotBg);
+
+    this.slotBg.setInteractive({ useHandCursor: true });
+    this.slotBg.on("pointerover", () => this.emit("hover"));
+    this.slotBg.on("pointerup", () => this.emit("tap"));
 
     const genderSymbol = getGenderSymbol(this.pokemon.getGender(true));
     const isFusion = this.pokemon.isFusion();
