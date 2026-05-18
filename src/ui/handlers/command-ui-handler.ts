@@ -123,9 +123,9 @@ export class CommandUiHandler extends UiHandler {
       { command: Command.RUN, name: i18next.t("commandUiHandler:run") },
     ];
 
-    this.gridHelper.setItems(commands, false);
     this.getUi().bringToTop(this.gridHelper);
     this.fieldIndex = args.length > 0 ? (args[0] as number) : 0;
+    this.gridHelper.setItems(commands, false);
 
     this.gridHelper.setVisible(true);
     this.teraSelected = false;
