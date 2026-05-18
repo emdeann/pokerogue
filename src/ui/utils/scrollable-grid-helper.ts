@@ -313,6 +313,16 @@ export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TD
   }
 
   /**
+   * @returns The currently-selected item in the grid
+   *
+   * @privateRemarks
+   * Unless this is necessary, pass the data through config callbacks instead.
+   */
+  public getCurrentItem(): TData | undefined {
+    return this.items[this.cursor + this.getItemOffset()];
+  }
+
+  /**
    * Render cells for each visible item; hide any unoccupied cells.
    */
   private renderGrid(): void {

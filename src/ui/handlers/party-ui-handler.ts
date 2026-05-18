@@ -185,8 +185,6 @@ export class PartyUiHandler extends MessageUiHandler {
   public optionsContainer: Phaser.GameObjects.Container;
   private optionsBg: Phaser.GameObjects.NineSlice;
   private options: number[];
-  /** The option code currently highlighted in the submenu (mirrors {@linkcode optionsList}'s selection) */
-  private selectedOption: number;
   /** Scrollable list backing the options submenu */
   private optionsList: ScrollableListHelper<number> | null = null;
 
@@ -321,6 +319,19 @@ export class PartyUiHandler extends MessageUiHandler {
     this.message = partyMessageText;
 
     const partyCancelButton = new PartyCancelButton(291, -16);
+    partyCancelButton.on("hover", () => {
+      if (this.slotPointerInputBlocked()) {
+        return;
+      }
+      this.setCursor(CANCEL_CURSOR);
+    });
+
+    partyCancelButton.on("tap", () => {
+      if (this.slotPointerInputBlocked()) {
+        return;
+      }
+      this.attemptCancel();
+    });
     partyContainer.add(partyCancelButton);
 
     this.partyCancelButton = partyCancelButton;
@@ -332,6 +343,19 @@ export class PartyUiHandler extends MessageUiHandler {
     this.iconAnimHandler.setup();
 
     const partyDiscardModeButton = new PartyDiscardModeButton(DISCARD_BUTTON_X, DISCARD_BUTTON_Y, this);
+    partyDiscardModeButton.on("hover", () => {
+      if (this.slotPointerInputBlocked()) {
+        return;
+      }
+      this.setCursor(DISCARD_BUTTON_CURSOR);
+    });
+
+    partyDiscardModeButton.on("tap", () => {
+      if (this.slotPointerInputBlocked()) {
+        return;
+      }
+      this.actionDiscardButton();
+    });
     partyContainer.add(partyDiscardModeButton);
     this.partyDiscardModeButton = partyDiscardModeButton;
 
@@ -567,9 +591,8 @@ export class PartyUiHandler extends MessageUiHandler {
   }
 
   // TODO: This will be largely changed with the modifier rework
-  private processModifierTransferModeInput(pokemon: PlayerPokemon) {
+  private processModifierTransferModeInput(option: number, pokemon: PlayerPokemon) {
     const ui = this.getUi();
-    const option = this.selectedOption;
     const allItems = this.getTransferrableItemsFromPokemon(pokemon);
     // get the index of the "All" option.
     const allCursorIndex = allItems.length;
@@ -580,7 +603,7 @@ export class PartyUiHandler extends MessageUiHandler {
 
     // TODO: Revise this condition
     if (!this.transferMode) {
-      this.startTransfer();
+      this.startTransfer(option);
 
       let ableToTransferText: string;
       for (let p = 0; p < globalScene.getPlayerParty().length; p++) {
@@ -664,48 +687,30 @@ export class PartyUiHandler extends MessageUiHandler {
     return false;
   }
 
-  private processModifierTransferModeLeftRightInput(button: Button): boolean {
-    const option = this.selectedOption;
+  private onTransferQuantityAdjust(option: number, button: Button): void {
     if (option === PartyOption.ALL || this.transferQuantitiesMax?.[option] == null) {
-      return false;
+      return;
     }
 
     if (button === Button.LEFT) {
-      /** Decrease quantity for the current item */
       this.transferQuantities[option] =
         this.transferQuantities[option] === 1
           ? this.transferQuantitiesMax[option]
           : this.transferQuantities[option] - 1;
     } else {
-      /** Increase quantity for the current item */
       this.transferQuantities[option] =
         this.transferQuantities[option] === this.transferQuantitiesMax[option]
           ? 1
           : this.transferQuantities[option] + 1;
     }
 
-    this.refreshOptionsListPreservingSelection();
+    // Redraw labels with the new quantity; `false` preserves the current selection.
+    this.optionsList?.setItems(this.options, false);
     this.getUi().playSelect();
-    return true;
   }
 
-  /**
-   * Re-feed the current option list to {@linkcode optionsList} (picking up changed
-   * quantity labels) and restore the previously highlighted row.
-   */
-  private refreshOptionsListPreservingSelection(): void {
-    if (!this.optionsList) {
-      return;
-    }
-    const targetIndex = this.options.indexOf(this.selectedOption);
-    this.optionsList.setItems(this.options);
-    for (let i = 0; i < targetIndex; i++) {
-      this.optionsList.processInput(Button.DOWN);
-    }
-  }
-  private processDiscardMenuInput(pokemon: PlayerPokemon) {
+  private processDiscardMenuInput(option: number, pokemon: PlayerPokemon) {
     const ui = this.getUi();
-    const option = this.selectedOption;
     this.clearOptions();
 
     this.blockInput = true;
@@ -742,9 +747,8 @@ export class PartyUiHandler extends MessageUiHandler {
     }
   }
 
-  private processRememberMoveModeInput(pokemon: PlayerPokemon) {
+  private processRememberMoveModeInput(option: number, pokemon: PlayerPokemon) {
     const ui = this.getUi();
-    const option = this.selectedOption;
 
     // clear overlay on cancel
     this.moveInfoOverlay.clear();
@@ -799,16 +803,16 @@ export class PartyUiHandler extends MessageUiHandler {
     // TODO: Careful about using success for the return values here. Find a better way
     // PartyOption.ALL, and options specific to the mode (held items)
     if (this.partyUiMode === PartyUiMode.MODIFIER_TRANSFER) {
-      return this.processModifierTransferModeInput(pokemon);
+      return this.processModifierTransferModeInput(option, pokemon);
     }
 
     if (this.partyUiMode === PartyUiMode.DISCARD) {
-      return this.processDiscardMenuInput(pokemon);
+      return this.processDiscardMenuInput(option, pokemon);
     }
 
     // options specific to the mode (moves)
     if (this.partyUiMode === PartyUiMode.REMEMBER_MOVE_MODIFIER) {
-      return this.processRememberMoveModeInput(pokemon);
+      return this.processRememberMoveModeInput(option, pokemon);
     }
 
     // These are the options that do not involve a callback
@@ -873,7 +877,7 @@ export class PartyUiHandler extends MessageUiHandler {
         (this.selectCallback as PartyModifierSpliceSelectCallback)(this.transferCursor, this.cursor);
         this.clearTransfer();
       } else if (option === PartyOption.APPLY) {
-        this.startTransfer();
+        this.startTransfer(option);
       }
       this.clearOptions();
       ui.playSelect();
@@ -927,10 +931,6 @@ export class PartyUiHandler extends MessageUiHandler {
       return true;
     }
 
-    if ((button === Button.LEFT || button === Button.RIGHT) && this.isItemManageMode() && !this.transferMode) {
-      return this.processModifierTransferModeLeftRightInput(button);
-    }
-
     return this.optionsList?.processInput(button) ?? false;
   }
 
@@ -976,6 +976,32 @@ export class PartyUiHandler extends MessageUiHandler {
     return !(this.partyUiMode === PartyUiMode.FAINT_SWITCH || this.partyUiMode === PartyUiMode.REVIVAL_BLESSING);
   }
 
+  private attemptCancel(): boolean {
+    if (this.allowCancel()) {
+      return this.processInput(Button.CANCEL);
+    }
+    this.getUi().playError();
+    return false;
+  }
+
+  private actionDiscardButton(): boolean {
+    const ui = this.getUi();
+    switch (this.partyUiMode) {
+      case PartyUiMode.DISCARD:
+        this.partyUiMode = PartyUiMode.MODIFIER_TRANSFER;
+        break;
+      case PartyUiMode.MODIFIER_TRANSFER:
+        this.partyUiMode = PartyUiMode.DISCARD;
+        break;
+      default:
+        ui.playError();
+        return false;
+    }
+    this.partyDiscardModeButton.toggleIcon(this.partyUiMode);
+    ui.playSelect();
+    return true;
+  }
+
   /**
    * Return whether this UI handler is responsible for managing items.
    * Used to ensure proper placement of mode toggle buttons in the UI, etc.
@@ -1004,28 +1030,12 @@ export class PartyUiHandler extends MessageUiHandler {
     // Toggle item transfer mode to discard items or vice versa
     // Prevent changing mode, when currently transfering an item
     if (this.cursor === DISCARD_BUTTON_CURSOR && !this.transferMode) {
-      switch (this.partyUiMode) {
-        case PartyUiMode.DISCARD:
-          this.partyUiMode = PartyUiMode.MODIFIER_TRANSFER;
-          break;
-        case PartyUiMode.MODIFIER_TRANSFER:
-          this.partyUiMode = PartyUiMode.DISCARD;
-          break;
-        default:
-          ui.playError();
-          return false;
-      }
-      this.partyDiscardModeButton.toggleIcon(this.partyUiMode);
-      ui.playSelect();
-      return true;
+      return this.actionDiscardButton();
     }
 
     // Pressing return button
     if (this.cursor === CANCEL_CURSOR) {
-      if (this.allowCancel()) {
-        return this.processInput(Button.CANCEL);
-      }
-      ui.playError();
+      return this.attemptCancel();
     }
     return true;
   }
@@ -1158,9 +1168,8 @@ export class PartyUiHandler extends MessageUiHandler {
       this.lastCursor = party.length - 1;
     }
 
-    for (const p in party) {
-      const slotIndex = Number.parseInt(p);
-      const partySlot = new PartySlot(slotIndex, party[p], this.iconAnimHandler, this.partyUiMode, this.tmMoveId);
+    for (const [slotIndex, p] of party.entries()) {
+      const partySlot = new PartySlot(slotIndex, p, this.iconAnimHandler, this.partyUiMode, this.tmMoveId);
       globalScene.add.existing(partySlot);
       this.partySlotsContainer.add(partySlot);
       this.partySlots.push(partySlot);
@@ -1176,7 +1185,7 @@ export class PartyUiHandler extends MessageUiHandler {
    * Whether pointer interactions with party slots should currently be ignored.
    */
   private slotPointerInputBlocked(): boolean {
-    return this.optionsMode || this.pendingPrompt || this.blockInput;
+    return !this.hasInputOwnership() || this.optionsMode || this.pendingPrompt || this.blockInput;
   }
 
   /**
@@ -1258,6 +1267,9 @@ export class PartyUiHandler extends MessageUiHandler {
     }
 
     this.optionsMode = true;
+    for (const slot of this.partySlots) {
+      slot.setInputEnabled(false);
+    }
 
     let optionsMessage = i18next.t("partyUiHandler:doWhatWithThisPokemon");
 
@@ -1660,6 +1672,10 @@ export class PartyUiHandler extends MessageUiHandler {
       getLabel: option => this.getOptionLabel(option, pokemon),
       onItemSelected: option => this.onOptionHighlighted(option, pokemon),
       onItemActioned: option => this.processActionButtonForOptions(option),
+      onItemAdjusted:
+        this.isItemManageMode() && !this.transferMode
+          ? (option, button) => this.onTransferQuantityAdjust(option, button)
+          : undefined,
       onCancel: () => {
         this.clearOptions();
         this.getUi().playSelect();
@@ -1682,32 +1698,28 @@ export class PartyUiHandler extends MessageUiHandler {
   }
 
   /**
-   * Side effects that previously lived in the mode-specific up/down handlers,
-   * now driven by the list helper whenever the highlighted option changes.
+   * Side effect previously living in the mode-specific up/down handler: refresh
+   * the relearn-move info overlay whenever the highlighted option changes.
    */
   private onOptionHighlighted(option: number, pokemon: PlayerPokemon): void {
-    this.selectedOption = option;
-
-    if (this.partyUiMode === PartyUiMode.REMEMBER_MOVE_MODIFIER) {
-      const move = allMoves[pokemon.getLearnableLevelMoves()[option]];
-      if (move) {
-        this.moveInfoOverlay.show(move);
-      } else {
-        this.moveInfoOverlay.clear();
-      }
-    } else if (this.partyUiMode === PartyUiMode.MODIFIER_TRANSFER && !this.transferMode && option !== PartyOption.ALL) {
-      this.transferQuantities[option] = this.transferQuantitiesMax[option];
+    if (this.partyUiMode !== PartyUiMode.REMEMBER_MOVE_MODIFIER) {
+      return;
+    }
+    const move = allMoves[pokemon.getLearnableLevelMoves()[option]];
+    if (move) {
+      this.moveInfoOverlay.show(move);
+    } else {
+      this.moveInfoOverlay.clear();
     }
   }
 
-  startTransfer(): void {
+  startTransfer(option: number): void {
     this.transferMode = true;
     this.transferCursor = this.cursor;
 
     const itemCount = this.getTransferrableItemsFromPokemon(globalScene.getPlayerParty()[this.cursor]).length;
-    this.transferAll = this.selectedOption === PartyOption.ALL;
-    this.transferOptionCursor = this.transferAll ? itemCount : this.selectedOption;
-
+    this.transferAll = option === PartyOption.ALL;
+    this.transferOptionCursor = this.transferAll ? itemCount : option;
     this.partySlots[this.transferCursor].setTransfer(true);
   }
 
@@ -1825,6 +1837,11 @@ export class PartyUiHandler extends MessageUiHandler {
     this.optionsList = null;
     this.optionsContainer.removeAll(true);
 
+    // Re-enable slot taps now that the submenu is gone.
+    for (const slot of this.partySlots) {
+      slot.setInputEnabled(true);
+    }
+
     this.partyMessageBox.setSize(262, 30);
     this.showPartyText();
   }
@@ -1906,6 +1923,18 @@ class PartySlot extends Phaser.GameObjects.Container {
 
   getPokemon(): PlayerPokemon {
     return this.pokemon;
+  }
+
+  /**
+   * Enable or disable pointer hit-testing on this slot. Disabled while a submenu
+   * is open so taps on submenu options can't fall through to the slot beneath.
+   */
+  public setInputEnabled(enabled: boolean): void {
+    if (enabled) {
+      this.slotBg.setInteractive({ useHandCursor: true });
+    } else {
+      this.slotBg.disableInteractive();
+    }
   }
 
   setup(partyUiMode: PartyUiMode, tmMoveId: MoveId) {
@@ -2209,6 +2238,12 @@ class PartyCancelButton extends Phaser.GameObjects.Container {
       TextStyle.PARTY_CANCEL_BUTTON,
     );
     this.add(partyCancelText);
+
+    for (const sprite of [partyCancelBg, partyCancelPb]) {
+      sprite.setInteractive();
+      sprite.on("pointerover", () => this.emit("hover"));
+      sprite.on("pointerup", () => this.emit("tap"));
+    }
   }
 
   select() {
@@ -2256,6 +2291,13 @@ class PartyDiscardModeButton extends Phaser.GameObjects.Container {
     this.add(this.transferIcon);
     this.add(this.discardIcon);
     this.add(this.textBox);
+
+    for (const sprite of [this.transferIcon, this.discardIcon]) {
+      sprite
+        .setInteractive()
+        .on("pointerover", () => this.emit("hover"))
+        .on("pointerup", () => this.emit("tap"));
+    }
 
     this.clear();
   }

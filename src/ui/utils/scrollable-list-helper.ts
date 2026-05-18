@@ -1,5 +1,5 @@
 import { globalScene } from "#app/global-scene";
-import type { Button } from "#enums/buttons";
+import { Button } from "#enums/buttons";
 import { TextStyle } from "#enums/text-style";
 import { ScrollableGridHelper } from "#ui/scrollable-grid-helper";
 import { addBBCodeTextObject, addTextObject } from "#ui/text";
@@ -69,6 +69,8 @@ export interface ScrollableListConfig<TData> {
 
   onItemSelected?: (data: TData) => void;
   onItemActioned?: (data: TData) => void;
+  /** Invoked on LEFT/RIGHT while a non-cancel item is highlighted. */
+  onItemAdjusted?: ((data: TData, button: Button) => void) | undefined;
   onCancel?: () => void;
 }
 
@@ -186,11 +188,11 @@ export class ScrollableListHelper<TData> extends Phaser.GameObjects.Container {
    * Replace the items to be displayed. Resets the cursor and scroll position, redraws the grid,
    * and fires {@linkcode ScrollableGridConfig.onItemSelected} for the first item (if any).
    */
-  setItems(items: TData[]): void {
+  setItems(items: TData[], resetCursor = true): void {
     const displayItems: (TData | string)[] =
       this.config.cancelText != null ? [...items, this.config.cancelText] : items;
 
-    this.gridHelper.setItems(displayItems);
+    this.gridHelper.setItems(displayItems, resetCursor);
   }
 
   /** Reset scrolling + cursor position and remove the cursor visual. */
@@ -208,6 +210,16 @@ export class ScrollableListHelper<TData> extends Phaser.GameObjects.Container {
    * @returns `true` if the input was consumed
    */
   processInput(button: Button): boolean {
+    const currentData = this.gridHelper.getCurrentItem();
+    if (
+      (button === Button.LEFT || button === Button.RIGHT)
+      && this.config.onItemAdjusted
+      && currentData != null
+      && !this.isCancelItem(currentData)
+    ) {
+      this.config.onItemAdjusted(currentData, button);
+      return true;
+    }
     return this.gridHelper.processInput(button);
   }
 }
