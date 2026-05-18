@@ -181,6 +181,7 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
     this.fieldIndex = args[0] ?? 0;
     this.fromCommand = args[1] ?? Command.FIGHT;
     this.gridHelper.updateCursorConfig(this.fromCommand === Command.TERA ? TERA_CURSOR : NORMAL_CURSOR);
+    // todo this is the only consumer of `tempSummonData.turnCount`, and it's definitely possible to track internally instead
     if (pokemon.tempSummonData.turnCount > 1) {
       this.gridHelper.setCursor(this.fieldIndex === BattlerIndex.PLAYER ? this.player1Cursor : this.player2Cursor);
     } else {
