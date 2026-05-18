@@ -50,7 +50,7 @@ export abstract class UiHandler {
   /**
    * Called by the UI to determine when this handler is allowed to receive touch inputs.
    */
-  setInputEnabled(enabled: boolean): void {
+  public setInputEnabled(enabled: boolean): void {
     this.inputOwned = enabled;
     this.applyInputState();
   }

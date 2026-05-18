@@ -1232,12 +1232,19 @@ export class PartyUiHandler extends MessageUiHandler {
   }
 
   /**
+   * Whether pointer interactions with party slots should currently be ignored.
+   */
+  private slotPointerInputBlocked(): boolean {
+    return this.optionsMode || this.pendingPrompt || this.blockInput;
+  }
+
+  /**
    * Move the cursor to the given party slot in response to a pointer interaction.
    *
    * @returns Whether the cursor actually moved.
    */
   private moveCursorToSlot(slotIndex: number): boolean {
-    if (this.optionsMode || this.pendingPrompt || this.blockInput) {
+    if (this.slotPointerInputBlocked()) {
       return false;
     }
     const changed = this.setCursor(slotIndex);
@@ -1251,6 +1258,9 @@ export class PartyUiHandler extends MessageUiHandler {
    * Handle a touch/click tap on a party member slot.
    */
   private handleSlotTap(slotIndex: number): void {
+    if (this.slotPointerInputBlocked()) {
+      return;
+    }
     this.moveCursorToSlot(slotIndex);
     this.processInput(Button.ACTION);
   }
