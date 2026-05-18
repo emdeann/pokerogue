@@ -54,6 +54,7 @@ export class TargetSelectUiHandler extends UiHandler {
       return false;
     }
 
+    this.setupTouchEvents();
     this.enemyModifiers = globalScene.getModifierBar(true);
 
     // If default targets are specified, use them instead
@@ -143,6 +144,9 @@ export class TargetSelectUiHandler extends UiHandler {
     const multipleTargets = this.targets.map(index => globalScene.getField()[index]);
 
     this.targetsHighlighted = this.isMultipleTargets ? multipleTargets : [singleTarget];
+    if ((!this.isMultipleTargets && this.cursor === cursor) || !this.targetsHighlighted.some(t => t != null)) {
+      return false;
+    }
 
     const ret = super.setCursor(cursor);
 
@@ -221,8 +225,49 @@ export class TargetSelectUiHandler extends UiHandler {
     }
   }
 
+  private setupTouchEvents(): void {
+    for (const [i, target] of this.targets.entries()) {
+      const pokemon = globalScene.getField()[target];
+      if (pokemon == null) {
+        continue;
+      }
+
+      const sprite = pokemon.getSprite().setInteractive();
+      if (!this.isMultipleTargets) {
+        sprite.on("pointerover", () => {
+          if (!this.hasInputOwnership()) {
+            return;
+          }
+          this.setCursor(target);
+        });
+      }
+
+      sprite.on("pointerup", () => {
+        if (!this.hasInputOwnership()) {
+          return;
+        }
+        if (this.cursor !== i) {
+          this.setCursor(target);
+        }
+        this.processInput(Button.ACTION);
+      });
+    }
+  }
+
+  private removeTouchEvents(): void {
+    for (const target of this.targets) {
+      const pokemon = globalScene.getField()[target];
+      if (pokemon == null) {
+        continue;
+      }
+
+      pokemon.getSprite().disableInteractive().off("pointerover").off("pointerup");
+    }
+  }
+
   clear() {
     super.clear();
     this.eraseCursor();
+    this.removeTouchEvents();
   }
 }
