@@ -2,6 +2,7 @@ import type { InfoToggle } from "#app/battle-scene";
 import { globalScene } from "#app/global-scene";
 import { getTypeDamageMultiplierColor } from "#data/type";
 import { BattleType } from "#enums/battle-type";
+import { BattlerIndex } from "#enums/battler-index";
 import { Button } from "#enums/buttons";
 import { Command } from "#enums/command";
 import { MoveCategory } from "#enums/move-category";
@@ -57,7 +58,12 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
 
   protected fieldIndex = 0;
   protected fromCommand: Command = Command.FIGHT;
-  protected cursor2 = 0;
+  /** Used to distinguish which slot to return to for each player pokemon
+   *
+   * Prefer {@linkcode gridHelper} for the actual grid state
+   */
+  protected player1Cursor = 0;
+  protected player2Cursor = 0;
 
   constructor() {
     super(UiMode.FIGHT);
@@ -84,6 +90,7 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
         spacingY: 16,
         createCell: () => globalScene.add.container(0, 0),
         renderCell: (container, moveWithUser) => {
+          container.removeAll(true);
           const moveText = addTextObject(0, 0, moveWithUser.move.getName(), TextStyle.WINDOW).setName(
             "text-empty-move",
           );
@@ -174,6 +181,11 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
     this.fieldIndex = args[0] ?? 0;
     this.fromCommand = args[1] ?? Command.FIGHT;
     this.gridHelper.updateCursorConfig(this.fromCommand === Command.TERA ? TERA_CURSOR : NORMAL_CURSOR);
+    if (pokemon.tempSummonData.turnCount > 1) {
+      this.gridHelper.setCursor(this.fieldIndex === BattlerIndex.PLAYER ? this.player1Cursor : this.player2Cursor);
+    } else {
+      this.gridHelper.setCursor(0);
+    }
 
     const messageHandler = this.getUi().getMessageHandler();
     messageHandler.bg.setVisible(false);
@@ -310,6 +322,11 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
   }
 
   private onMoveSelect(pokemonMove: PokemonMove): boolean {
+    if (this.fieldIndex === BattlerIndex.PLAYER) {
+      this.player1Cursor = this.gridHelper.getCursor();
+    } else {
+      this.player2Cursor = this.gridHelper.getCursor();
+    }
     this.moveInfoOverlay.clear();
     this.setMoveInfo(pokemonMove);
     return true;
@@ -338,7 +355,10 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
   }
 
   displayMoves(pokemon: Pokemon) {
-    this.gridHelper.setItems(pokemon.getMoveset().map(move => ({ user: pokemon, move })));
+    this.gridHelper.setItems(
+      pokemon.getMoveset().map(move => ({ user: pokemon, move })),
+      false,
+    );
   }
 
   /**
@@ -382,6 +402,7 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
     super.clear();
     const messageHandler = this.getUi().getMessageHandler();
     this.clearMoves();
+    this.gridHelper.setVisible(false);
     this.setInfoVis(false);
     this.moveInfoOverlay.clear();
     messageHandler.bg.setVisible(true);
@@ -389,7 +410,7 @@ export class FightUiHandler extends UiHandler implements InfoToggle {
   }
 
   clearMoves() {
-    this.gridHelper.clearItems();
+    this.gridHelper.setItems([], false);
     const opponents = (globalScene.phaseManager.getCurrentPhase() as CommandPhase).getPokemon().getOpponents();
     opponents.forEach(opponent => {
       (opponent as EnemyPokemon).updateEffectiveness();

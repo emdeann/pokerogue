@@ -167,7 +167,7 @@ export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TD
    * Replace the items to be displayed. Resets the cursor and scroll position, redraws the grid,
    * and fires {@linkcode ScrollableGridConfig.onItemSelected} for the first item (if any).
    */
-  setItems(items: TData[], resetCursor = true): void {
+  public setItems(items: TData[], resetCursor = true): void {
     this.items = items;
     this.scrollBar?.setTotalRows(Math.ceil(items.length / this.COLUMNS));
     if (resetCursor || this.cursor >= this.ROWS * this.COLUMNS) {
@@ -177,7 +177,7 @@ export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TD
   }
 
   /** Reset scrolling + cursor position and remove the cursor visual. */
-  reset(): void {
+  public reset(): void {
     this.setScrollCursor(0, 0);
     if (this.cursorObj) {
       this.cursorObj.destroy();
@@ -193,7 +193,7 @@ export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TD
    * Process keyboard input.
    * @returns `true` if the input was consumed
    */
-  processInput(button: Button): boolean {
+  public processInput(button: Button): boolean {
     if (button === Button.ACTION) {
       return this.processActionInput();
     }
@@ -431,7 +431,7 @@ export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TD
    * @param cursor - The new location for the cursor
    * @returns If the cursor actually moved (i.e. if the new location is different)
    */
-  private setCursor(cursor: number): boolean {
+  public setCursor(cursor: number): boolean {
     if (cursor === this.cursor) {
       return false;
     }
@@ -526,10 +526,6 @@ export class ScrollableGridHelper<TCell extends Phaser.GameObjects.Container, TD
       return false;
     }
     return this.setCursor(this.cursor - currentColumnIndex);
-  }
-
-  public clearItems(): void {
-    this.setItems([]);
   }
 
   // todo this is provided for migration simplicity but will ideally be removed eventually
