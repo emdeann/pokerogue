@@ -1,7 +1,7 @@
 import { globalScene } from "#app/global-scene";
 import { Button } from "#enums/buttons";
 import { UiMode } from "#enums/ui-mode";
-import type { OptionSelectConfig } from "#ui/abstract-option-select-ui-handler";
+import type { OptionSelectConfig, OptionSelectItem } from "#ui/abstract-option-select-ui-handler";
 import { AbstractOptionSelectUiHandler } from "#ui/abstract-option-select-ui-handler";
 import i18next from "i18next";
 
@@ -19,7 +19,21 @@ export class ConfirmUiHandler extends AbstractOptionSelectUiHandler {
     return ConfirmUiHandler.windowWidth;
   }
 
-  show(args: any[]): boolean {
+  private getOptions(argFuncs: any[], labels: string[]): OptionSelectItem[] {
+    const options: OptionSelectItem[] = [];
+    for (const [i, label] of labels.entries()) {
+      options.push({
+        label: i18next.t(label),
+        handler: () => {
+          argFuncs[i]();
+          return true;
+        },
+      });
+    }
+    return options;
+  }
+
+  public override show(args: any[]): boolean {
     if (
       args.length === 5
       && args[0] instanceof Function
@@ -29,36 +43,7 @@ export class ConfirmUiHandler extends AbstractOptionSelectUiHandler {
       && args[4] === "fullParty"
     ) {
       const config: OptionSelectConfig = {
-        options: [
-          {
-            label: i18next.t("partyUiHandler:summary"),
-            handler: () => {
-              args[0]();
-              return true;
-            },
-          },
-          {
-            label: i18next.t("partyUiHandler:pokedex"),
-            handler: () => {
-              args[1]();
-              return true;
-            },
-          },
-          {
-            label: i18next.t("menu:yes"),
-            handler: () => {
-              args[2]();
-              return true;
-            },
-          },
-          {
-            label: i18next.t("menu:no"),
-            handler: () => {
-              args[3]();
-              return true;
-            },
-          },
-        ],
+        options: this.getOptions(args, ["partyUiHandler:summary", "partyUiHandler:pokedex", "menu:yes", "menu:no"]),
         delay: args.length >= 9 && args[8] !== null ? (args[8] as number) : 0,
       };
 
@@ -74,24 +59,10 @@ export class ConfirmUiHandler extends AbstractOptionSelectUiHandler {
       this.setCursor(this.switchCheck ? this.switchCheckCursor : 0);
       return true;
     }
+
     if (args.length >= 2 && args[0] instanceof Function && args[1] instanceof Function) {
       const config: OptionSelectConfig = {
-        options: [
-          {
-            label: i18next.t("menu:yes"),
-            handler: () => {
-              args[0]();
-              return true;
-            },
-          },
-          {
-            label: i18next.t("menu:no"),
-            handler: () => {
-              args[1]();
-              return true;
-            },
-          },
-        ],
+        options: this.getOptions(args, ["menu:yes", "menu:no"]),
         delay: args.length >= 6 && args[5] !== null ? (args[5] as number) : 0,
         noCancel: args.length >= 7 && args[6] !== null ? (args[6] as boolean) : false,
       };
