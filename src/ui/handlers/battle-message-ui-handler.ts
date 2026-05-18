@@ -36,6 +36,13 @@ export class BattleMessageUiHandler extends MessageUiHandler {
     this.bg = globalScene.add.sprite(0, 0, "bg", globalScene.windowType);
     this.bg.setName("sprite-battle-msg-bg");
     this.bg.setOrigin(0, 1);
+    this.bg.setInteractive();
+    this.bg.on("pointerup", () => {
+      if (!this.hasInputOwnership()) {
+        return;
+      }
+      this.processInput(Button.ACTION);
+    });
     ui.add(this.bg);
 
     this.commandWindow = addWindow(202, 0, 118, 48);
