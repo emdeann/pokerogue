@@ -38,6 +38,10 @@ export interface AccountChangePwResponse {
   success: boolean;
 }
 
+export interface AccountChangeUsernameRequest {
+  username: string;
+}
+
 // #endregion Account API
 
 // #region Admin API

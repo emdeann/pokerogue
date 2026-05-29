@@ -2,6 +2,7 @@ import { ApiBase } from "#api/api-base";
 import { SESSION_ID_COOKIE_NAME } from "#app/constants";
 import type {
   AccountChangePwRequest,
+  AccountChangeUsernameRequest,
   AccountInfoResponse,
   AccountLoginRequest,
   AccountLoginResponse,
@@ -104,6 +105,26 @@ export class PokerogueAccountApi extends ApiBase {
       return response.text();
     } catch (err) {
       console.warn("Change password failed!", err);
+    }
+
+    return "Unknown error!";
+  }
+
+  /**
+   * Send a change username request.
+   * @param changeUsernameData The {@linkcode AccountChangeUsernameRequest} to send
+   * @returns An error message if something went wrong, otherwise `null`
+   */
+  public async changeUsername(changeUsernameData: AccountChangeUsernameRequest): Promise<string | null> {
+    try {
+      const response = await this.doPost("/account/changeusername", changeUsernameData, "form-urlencoded");
+      if (response.ok) {
+        return null;
+      }
+      console.warn("Change username failed!", response.status, response.statusText);
+      return response.text();
+    } catch (err) {
+      console.warn("Change username failed!", err);
     }
 
     return "Unknown error!";

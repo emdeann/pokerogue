@@ -325,6 +325,16 @@ export class MenuUiHandler extends MessageUiHandler {
         },
         keepOpen: true,
       },
+      {
+        label: i18next.t("menu:changeUsername"),
+        handler: () => {
+          ui.setOverlayMode(UiMode.CHANGE_USERNAME_FORM, {
+            buttonActions: [() => ui.revertMode(), () => ui.revertMode()],
+          });
+          return true;
+        },
+        keepOpen: true,
+      },
     );
     if (isBeta || isDev) {
       manageDataOptions.push({

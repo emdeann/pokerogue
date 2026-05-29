@@ -14,6 +14,7 @@ import { BattleMessageUiHandler } from "#ui/battle-message-ui-handler";
 import type { BgmBar } from "#ui/bgm-bar";
 import { GameChallengesUiHandler } from "#ui/challenges-select-ui-handler";
 import { ChangePasswordFormUiHandler } from "#ui/change-password-form-ui-handler";
+import { ChangeUsernameFormUiHandler } from "#ui/change-username-ui-handler";
 import { CommandUiHandler } from "#ui/command-ui-handler";
 import { ConfirmUiHandler } from "#ui/confirm-ui-handler";
 import { EggGachaUiHandler } from "#ui/egg-gacha-ui-handler";
@@ -108,6 +109,7 @@ const noTransitionModes = [
   UiMode.MYSTERY_ENCOUNTER,
   UiMode.RUN_INFO,
   UiMode.CHANGE_PASSWORD_FORM,
+  UiMode.CHANGE_USERNAME_FORM,
 ];
 
 // biome-ignore lint/style/useNamingConvention: a unique case (only 2 letters)
@@ -182,6 +184,7 @@ export class UI extends Phaser.GameObjects.Container {
       new AdminUiHandler(),
       new MysteryEncounterUiHandler(),
       new ChangePasswordFormUiHandler(),
+      new ChangeUsernameFormUiHandler(),
     ];
   }
 
